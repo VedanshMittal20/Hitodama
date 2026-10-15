@@ -6,7 +6,7 @@
                     mc:Ignorable="po">
 
   <ResourceDictionary.MergedDictionaries>
-    <ResourceDictionary Source="Tokens.xaml" />
+    <ResourceDictionary Source="pack://application:,,,/Companion.Shell;component/Resources/Tokens.xaml" />
   </ResourceDictionary.MergedDictionaries>
 
   <!-- Value Converters -->
@@ -21,6 +21,11 @@
   <res:ClipTypeBorderConverter x:Key="ClipTypeBorderConverter" />
   <res:ClipTypeFgConverter x:Key="ClipTypeFgConverter" />
   <res:ClipboardPinTextConverter x:Key="ClipboardPinTextConverter" />
+  <res:ClipboardPinBorderConverter x:Key="ClipboardPinBorderConverter" />
+  <res:ClipIsUrlConverter x:Key="ClipIsUrlConverter" />
+  <res:ClipIsJsonConverter x:Key="ClipIsJsonConverter" />
+  <res:ClipIsHexColorConverter x:Key="ClipIsHexColorConverter" />
+  <res:ClipHexBrushConverter x:Key="ClipHexBrushConverter" />
 
   <!-- Quiet Focus Visual -->
   <Style x:Key="QuietFocusVisual">

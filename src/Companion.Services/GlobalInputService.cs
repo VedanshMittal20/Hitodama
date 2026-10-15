@@ -25,6 +25,7 @@ public sealed class GlobalInputService : IDisposable
     private const int VkSpace = 0x20;
     private const int VkBackspace = 0x08;
     private const int VkReturn = 0x0D;
+    private const int VkC = 0x43;
     private const int HcAction = 0;
 
     private static readonly HashSet<int> ModifierKeys =
@@ -74,11 +75,13 @@ public sealed class GlobalInputService : IDisposable
     private bool _dictationActive;
     private bool _circleCancelled;
     private bool _dictationCancelled;
+    private bool _circleOcrKeyConsumed;
     private int _permissionPromptActive;
-    private bool _disposed;
+    private volatile bool _disposed;
 
     public event Action? CircleToAskStarted;
     public event Action? CircleToAskReleased;
+    public event Action? CircleToAskOcrRequested;
     public event Action? DictationStarted;
     public event Action? DictationReleased;
     public event Action? AssistantHotkeyPressed;
@@ -94,21 +97,24 @@ public sealed class GlobalInputService : IDisposable
 
     public void Start()
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        if (_hook != IntPtr.Zero)
+        lock (_sync)
         {
-            return;
-        }
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_hook != IntPtr.Zero)
+            {
+                return;
+            }
 
-        _hook = SetWindowsHookEx(WhKeyboardLl, _hookCallback, GetModuleHandle(null), 0);
-        if (_hook == IntPtr.Zero)
-        {
-            var exception = new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
-            SafeDiagnostics.WriteFailure("input", "hook-start", exception);
-            throw exception;
-        }
+            _hook = SetWindowsHookEx(WhKeyboardLl, _hookCallback, GetModuleHandle(null), 0);
+            if (_hook == IntPtr.Zero)
+            {
+                var exception = new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+                SafeDiagnostics.WriteFailure("input", "hook-start", exception);
+                throw exception;
+            }
 
-        SafeDiagnostics.WriteEvent("input", "hook-started");
+            SafeDiagnostics.WriteEvent("input", "hook-started");
+        }
     }
 
     private IntPtr OnKeyboardEvent(int code, IntPtr wParam, IntPtr lParam)
@@ -137,6 +143,7 @@ public sealed class GlobalInputService : IDisposable
         }
 
         Action? callback = null;
+        bool suppressInput = false;
 
         lock (_sync)
         {
@@ -145,6 +152,14 @@ public sealed class GlobalInputService : IDisposable
                 bool wasDown = !_keysDown.Add(key);
                 if (!wasDown)
                 {
+                    if (key == VkC && IsControlDown() && _circleActive)
+                    {
+                        _circleOcrKeyConsumed = true;
+                        suppressInput = true;
+                        callback += CircleToAskOcrRequested;
+                        SafeDiagnostics.WriteEvent("input", "circle-ocr-hotkey");
+                    }
+
                     if (!ModifierKeys.Contains(key))
                     {
                         _circleCancelled |= IsCircleChordDown();
@@ -169,6 +184,12 @@ public sealed class GlobalInputService : IDisposable
             else
             {
                 _keysDown.Remove(key);
+                if (key == VkC && _circleOcrKeyConsumed)
+                {
+                    _circleOcrKeyConsumed = false;
+                    suppressInput = true;
+                }
+
                 bool controlReleased = IsControlKey(key) && !IsControlDown();
                 bool shiftReleased = IsShiftKey(key) && !IsShiftDown();
                 bool windowsReleased = IsWindowsKey(key) && !IsWindowsDown();
@@ -208,7 +229,9 @@ public sealed class GlobalInputService : IDisposable
         }
 
         Dispatch(callback);
-        return CallNextHookEx(_hook, code, wParam, lParam);
+        return suppressInput
+            ? new IntPtr(1)
+            : CallNextHookEx(_hook, code, wParam, lParam);
     }
 
     private void UpdateHoldTimer()
@@ -311,22 +334,24 @@ public sealed class GlobalInputService : IDisposable
 
     public void Dispose()
     {
-        if (_disposed)
-        {
-            return;
-        }
-
-        _disposed = true;
+        IntPtr hook;
         lock (_sync)
         {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
             CancelPendingHold();
             _keysDown.Clear();
+            hook = _hook;
+            _hook = IntPtr.Zero;
         }
 
-        if (_hook != IntPtr.Zero)
+        if (hook != IntPtr.Zero)
         {
-            UnhookWindowsHookEx(_hook);
-            _hook = IntPtr.Zero;
+            UnhookWindowsHookEx(hook);
         }
     }
 }

@@ -155,8 +155,109 @@ public sealed class ClipTypeFgConverter : IValueConverter
 public sealed class ClipboardPinTextConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        value is true ? "Unpin" : "Pin";
+        value is true ? "📌" : "Pin";
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         DependencyProperty.UnsetValue;
 }
+
+[ValueConversion(typeof(bool), typeof(Brush))]
+public sealed class ClipboardPinBorderConverter : IValueConverter
+{
+    private static readonly Brush PinnedBorder = CreateFrozenBrush(Color.FromArgb(0x88, 0x38, 0xBD, 0xF8));
+    private static readonly Brush UnpinnedBorder = CreateFrozenBrush(Color.FromArgb(0x1F, 0xFF, 0xFF, 0xFF));
+
+    private static SolidColorBrush CreateFrozenBrush(Color color)
+    {
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        return brush;
+    }
+
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value is true ? PinnedBorder : UnpinnedBorder;
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        DependencyProperty.UnsetValue;
+}
+
+[ValueConversion(typeof(string), typeof(Visibility))]
+public sealed class ClipIsUrlConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is string s && (s.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || s.StartsWith("https://", StringComparison.OrdinalIgnoreCase)))
+        {
+            return Visibility.Visible;
+        }
+        return Visibility.Collapsed;
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        DependencyProperty.UnsetValue;
+}
+
+[ValueConversion(typeof(string), typeof(Visibility))]
+public sealed class ClipIsJsonConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is string s)
+        {
+            string trimmed = s.Trim();
+            if ((trimmed.StartsWith('{') && trimmed.EndsWith('}')) || (trimmed.StartsWith('[') && trimmed.EndsWith(']')))
+            {
+                return Visibility.Visible;
+            }
+        }
+        return Visibility.Collapsed;
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        DependencyProperty.UnsetValue;
+}
+
+[ValueConversion(typeof(string), typeof(Visibility))]
+public sealed class ClipIsHexColorConverter : IValueConverter
+{
+    private static readonly System.Text.RegularExpressions.Regex HexRegex =
+        new(@"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value is string s && HexRegex.IsMatch(s.Trim()) ? Visibility.Visible : Visibility.Collapsed;
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        DependencyProperty.UnsetValue;
+}
+
+[ValueConversion(typeof(string), typeof(Brush))]
+public sealed class ClipHexBrushConverter : IValueConverter
+{
+    private static readonly System.Text.RegularExpressions.Regex HexRegex =
+        new(@"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is string s && HexRegex.IsMatch(s.Trim()))
+        {
+            try
+            {
+                var color = (Color)System.Windows.Media.ColorConverter.ConvertFromString(s.Trim());
+                var brush = new SolidColorBrush(color);
+                brush.Freeze();
+                return brush;
+            }
+            catch (Exception exception) when (exception is FormatException or InvalidOperationException)
+            {
+                System.Diagnostics.Debug.WriteLine($"Invalid color binding value ({exception.GetType().Name}); using transparent fallback.");
+            }
+        }
+
+        return System.Windows.Media.Brushes.Transparent;
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        DependencyProperty.UnsetValue;
+}
+
+

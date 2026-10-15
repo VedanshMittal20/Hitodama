@@ -64,6 +64,13 @@ public sealed class SystemControlService
         }
     }
 
+    public bool ToggleDarkMode()
+    {
+        bool next = !IsDarkModeEnabled;
+        SetDarkMode(next);
+        return next;
+    }
+
     public (string DeviceName, int VolumePercent) GetDefaultAudioOutput()
     {
         using var enumerator = new MMDeviceEnumerator();
@@ -95,6 +102,13 @@ public sealed class SystemControlService
         device.AudioEndpointVolume.Mute = muted;
     }
 
+    public bool ToggleMute()
+    {
+        bool next = !IsMuted;
+        SetMuted(next);
+        return next;
+    }
+
     private float? _preDuckVolume;
     private readonly object _duckLock = new();
 
@@ -112,8 +126,9 @@ public sealed class SystemControlService
                     device.AudioEndpointVolume.MasterVolumeLevelScalar = Math.Clamp(_preDuckVolume.Value * targetFactor, 0.05f, 1.0f);
                 }
             }
-            catch
+            catch (Exception exception)
             {
+                SafeDiagnostics.WriteFailure("system-audio", "duck", exception);
             }
         }
     }
@@ -132,8 +147,9 @@ public sealed class SystemControlService
                     _preDuckVolume = null;
                 }
             }
-            catch
+            catch (Exception exception)
             {
+                SafeDiagnostics.WriteFailure("system-audio", "unduck", exception);
             }
         }
     }
@@ -217,6 +233,19 @@ public sealed class SystemControlService
             throw new InvalidOperationException(
                 $"Windows could not change Wi-Fi adapter '{adapter.Name}' (exit {process.ExitCode}): {detail}");
         }
+    }
+
+    public void ToggleWifi()
+    {
+        bool next = !GetWifiEnabled();
+        SetWifiEnabledAsync(next).GetAwaiter().GetResult();
+    }
+
+    public async Task<bool> ToggleWifiAsync(CancellationToken cancellationToken = default)
+    {
+        bool next = !GetWifiEnabled();
+        await SetWifiEnabledAsync(next, cancellationToken);
+        return next;
     }
 
     private static async Task<Radio[]> GetBluetoothRadiosAsync()

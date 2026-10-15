@@ -11,7 +11,11 @@ public static class Program
     {
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
         {
-            try { File.AppendAllText(Path.Combine(AppPaths.Root, "crash.log"), $"[{DateTime.UtcNow:u}] [AppDomain] {e.ExceptionObject}\n"); } catch { }
+            try { File.AppendAllText(Path.Combine(AppPaths.Root, "crash.log"), $"[{DateTime.UtcNow:u}] [AppDomain] {e.ExceptionObject}\n"); }
+            catch (Exception loggingException)
+            {
+                System.Diagnostics.Debug.WriteLine($"Could not write crash log ({loggingException.GetType().Name}).");
+            }
         };
 
         try
@@ -25,7 +29,11 @@ public static class Program
         }
         catch (Exception ex)
         {
-            try { File.AppendAllText(Path.Combine(AppPaths.Root, "crash.log"), $"[{DateTime.UtcNow:u}] [Main Exception] {ex}\n"); } catch { }
+            try { File.AppendAllText(Path.Combine(AppPaths.Root, "crash.log"), $"[{DateTime.UtcNow:u}] [Main Exception] {ex}\n"); }
+            catch (Exception loggingException)
+            {
+                System.Diagnostics.Debug.WriteLine($"Could not write main exception log ({loggingException.GetType().Name}).");
+            }
         }
     }
 }

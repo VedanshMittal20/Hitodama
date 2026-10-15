@@ -21,7 +21,8 @@ public sealed class EqualizerControl : FrameworkElement
         new(3.0, omega: 24.0, zeta: 0.70),
         new(3.0, omega: 26.0, zeta: 0.68),
         new(3.0, omega: 22.0, zeta: 0.72),
-        new(3.0, omega: 25.0, zeta: 0.69)
+        new(3.0, omega: 25.0, zeta: 0.69),
+        new(3.0, omega: 23.0, zeta: 0.71)
     ];
 
     private readonly Stopwatch _clock = new();
@@ -99,7 +100,7 @@ public sealed class EqualizerControl : FrameworkElement
 
     public EqualizerControl()
     {
-        Width = 24;
+        Width = 26;
         Height = 18;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -123,7 +124,7 @@ public sealed class EqualizerControl : FrameworkElement
             return;
         }
 
-        var brush = new LinearGradientBrush(AlbumPrimaryColor, AlbumSecondaryColor, 90);
+        var brush = new LinearGradientBrush(AlbumPrimaryColor, AlbumSecondaryColor, 90.0);
         brush.Freeze();
         _albumBrush = brush;
     }
@@ -133,7 +134,20 @@ public sealed class EqualizerControl : FrameworkElement
         if (d is EqualizerControl control)
         {
             control._isPlaying = (bool)e.NewValue;
-            control.EnsureAnimation();
+            if (!control._isPlaying)
+            {
+                foreach (var spring in control._barSprings)
+                {
+                    spring.Target = 3.0;
+                    spring.Reset(3.0);
+                }
+                control.StopAnimation();
+                control.InvalidateVisual();
+            }
+            else
+            {
+                control.EnsureAnimation();
+            }
         }
     }
 
@@ -213,17 +227,19 @@ public sealed class EqualizerControl : FrameworkElement
 
         if (_isPlaying)
         {
-            // Dynamic multi-harmonic frequencies for 4 bars
-            double wave1 = (Math.Sin(seconds * 7.3) + 1.0) * 0.5;
-            double wave2 = (Math.Sin(seconds * 11.1 + 1.2) + 1.0) * 0.5;
-            double wave3 = (Math.Sin(seconds * 8.9 + 2.5) + 1.0) * 0.5;
-            double wave4 = (Math.Sin(seconds * 13.4 + 0.7) + 1.0) * 0.5;
+            // 5 organic frequencies: omega = 3.7, 5.3, 4.1, 6.1, 3.3 Hz
+            double wave1 = (Math.Sin(seconds * 3.7 * 2 * Math.PI) + 1.0) * 0.5;
+            double wave2 = (Math.Sin(seconds * 5.3 * 2 * Math.PI + 1.2) + 1.0) * 0.5;
+            double wave3 = (Math.Sin(seconds * 4.1 * 2 * Math.PI + 2.5) + 1.0) * 0.5;
+            double wave4 = (Math.Sin(seconds * 6.1 * 2 * Math.PI + 0.7) + 1.0) * 0.5;
+            double wave5 = (Math.Sin(seconds * 3.3 * 2 * Math.PI + 1.8) + 1.0) * 0.5;
 
             double boost = Math.Max(_audioLevel, 0.25);
             _barSprings[0].Target = minHeight + (maxHeight - minHeight) * (wave1 * 0.7 + boost * 0.3);
             _barSprings[1].Target = minHeight + (maxHeight - minHeight) * (wave2 * 0.6 + boost * 0.4);
             _barSprings[2].Target = minHeight + (maxHeight - minHeight) * (wave3 * 0.8 + boost * 0.2);
             _barSprings[3].Target = minHeight + (maxHeight - minHeight) * (wave4 * 0.5 + boost * 0.5);
+            _barSprings[4].Target = minHeight + (maxHeight - minHeight) * (wave5 * 0.7 + boost * 0.3);
         }
         else
         {
@@ -254,19 +270,19 @@ public sealed class EqualizerControl : FrameworkElement
     {
         base.OnRender(dc);
 
-        double w = ActualWidth > 0 ? ActualWidth : 24.0;
+        double w = ActualWidth > 0 ? ActualWidth : 26.0;
         double h = ActualHeight > 0 ? ActualHeight : 18.0;
 
-        const double barWidth = 3.0;
-        const double barSpacing = 2.5;
-        const double radius = 1.5;
+        const double barWidth = 2.5;
+        const double barSpacing = 2.0;
+        const double radius = 1.25;
 
-        double totalBarsWidth = (4 * barWidth) + (3 * barSpacing);
+        double totalBarsWidth = (5 * barWidth) + (4 * barSpacing);
         double startX = (w - totalBarsWidth) / 2.0;
 
         Brush brush = _albumBrush ?? (System.Windows.Application.Current?.TryFindResource("AccentBrush") as Brush) ?? BarBrush;
 
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < 5; i++)
         {
             double barHeight = Math.Clamp(_barSprings[i].Current, 2.0, h);
             double x = startX + i * (barWidth + barSpacing);

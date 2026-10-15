@@ -24,6 +24,7 @@
   <!-- Surface2: Raised element or hover state -->
   <Color x:Key="Surface2Color">#FF1A1D26</Color>
   <SolidColorBrush x:Key="Surface2Brush" Color="{StaticResource Surface2Color}" po:Freeze="True" />
+  <SolidColorBrush x:Key="IslandElevatedBrush" Color="{StaticResource Surface2Color}" po:Freeze="True" />
   <SolidColorBrush x:Key="SurfaceHoverBrush" Color="{StaticResource Surface2Color}" po:Freeze="True" />
   <SolidColorBrush x:Key="GlassCardHoverBrush" Color="{StaticResource Surface2Color}" po:Freeze="True" />
 

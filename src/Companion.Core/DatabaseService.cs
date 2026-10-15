@@ -904,41 +904,111 @@ public sealed class DatabaseService : IDatabaseService
                 optionalEntropy: null,
                 DataProtectionScope.CurrentUser);
         }
-        finally
+        catch
         {
             CryptographicOperations.ZeroMemory(content);
+            throw;
         }
 
-        long id;
         try
         {
             using var connection = OpenConnection();
             using var transaction = connection.BeginTransaction();
-            using var insert = connection.CreateCommand();
-            insert.Transaction = transaction;
-            insert.CommandText = """
-                INSERT INTO clipboard_entries (content_type, content, preview_text, created_utc)
-                VALUES ($contentType, $content, '', $createdUtc);
-                """;
-            insert.Parameters.AddWithValue("$contentType", contentType);
-            insert.Parameters.Add("$content", SqliteType.Blob).Value = protectedContent;
-            insert.Parameters.AddWithValue("$createdUtc", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
-            insert.ExecuteNonQuery();
+            DateTime nowUtc = DateTime.UtcNow;
+            long? existingTextId = null;
+
+            if (contentType == "text")
+            {
+                using var findDuplicate = connection.CreateCommand();
+                findDuplicate.Transaction = transaction;
+                findDuplicate.CommandText = """
+                    SELECT id, content, created_utc
+                    FROM clipboard_entries
+                    WHERE content_type = 'text'
+                    ORDER BY is_pinned DESC, created_utc DESC, id DESC;
+                    """;
+
+                using SqliteDataReader reader = findDuplicate.ExecuteReader();
+                while (reader.Read())
+                {
+                    byte[] existingProtectedContent = (byte[])reader[1];
+                    byte[]? existingContent = null;
+                    try
+                    {
+                        existingContent = ProtectedData.Unprotect(
+                            existingProtectedContent,
+                            optionalEntropy: null,
+                            DataProtectionScope.CurrentUser);
+                        if (existingContent.Length == content.Length &&
+                            CryptographicOperations.FixedTimeEquals(existingContent, content))
+                        {
+                            existingTextId = reader.GetInt64(0);
+                            DateTime existingCreatedUtc = ParseUtc(reader.GetString(2));
+                            if (nowUtc <= existingCreatedUtc)
+                            {
+                                nowUtc = existingCreatedUtc.AddTicks(1);
+                            }
+
+                            break;
+                        }
+                    }
+                    finally
+                    {
+                        if (existingContent is not null)
+                        {
+                            CryptographicOperations.ZeroMemory(existingContent);
+                        }
+
+                        CryptographicOperations.ZeroMemory(existingProtectedContent);
+                    }
+                }
+            }
+
+            long id;
+            string createdUtc = nowUtc.ToString("O", CultureInfo.InvariantCulture);
+            if (existingTextId is long matchingId)
+            {
+                using var update = connection.CreateCommand();
+                update.Transaction = transaction;
+                update.CommandText = "UPDATE clipboard_entries SET created_utc = $createdUtc WHERE id = $id;";
+                update.Parameters.AddWithValue("$createdUtc", createdUtc);
+                update.Parameters.AddWithValue("$id", matchingId);
+                update.ExecuteNonQuery();
+                id = matchingId;
+            }
+            else
+            {
+                using var insert = connection.CreateCommand();
+                insert.Transaction = transaction;
+                insert.CommandText = """
+                    INSERT INTO clipboard_entries (content_type, content, preview_text, created_utc)
+                    VALUES ($contentType, $content, '', $createdUtc);
+                    """;
+                insert.Parameters.AddWithValue("$contentType", contentType);
+                insert.Parameters.Add("$content", SqliteType.Blob).Value = protectedContent;
+                insert.Parameters.AddWithValue("$createdUtc", createdUtc);
+                insert.ExecuteNonQuery();
+                id = GetLastInsertRowId(connection);
+            }
 
             TrimUnpinnedClipboardEntries(connection, transaction, maxEntries);
             transaction.Commit();
-            id = GetLastInsertRowId(connection);
+            return id;
         }
         finally
         {
+            CryptographicOperations.ZeroMemory(content);
             CryptographicOperations.ZeroMemory(protectedContent);
         }
-
-        return id;
     }
 
-    public bool SetClipboardEntryPinned(long id, bool isPinned)
+    public bool SetClipboardPinned(long id, bool isPinned, int maxUnpinned = DefaultClipboardLimit)
     {
+        if (maxUnpinned is < 1 or > 200)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxUnpinned), "Maximum unpinned entries must be between 1 and 200.");
+        }
+
         using var connection = OpenConnection();
         using var transaction = connection.BeginTransaction();
         using var command = connection.CreateCommand();
@@ -956,22 +1026,41 @@ public sealed class DatabaseService : IDatabaseService
         command.Parameters.AddWithValue("$createdUtc", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$id", id);
         bool changed = command.ExecuteNonQuery() > 0;
-        if (changed)
+        if (!isPinned)
         {
-            TrimUnpinnedClipboardEntries(connection, transaction, DefaultClipboardLimit);
+            TrimUnpinnedClipboardEntries(connection, transaction, maxUnpinned);
         }
 
         transaction.Commit();
         return changed;
     }
 
+    public bool SetClipboardEntryPinned(long id, bool isPinned) =>
+        SetClipboardPinned(id, isPinned, DefaultClipboardLimit);
+
     public bool DeleteClipboardEntry(long id)
     {
         using var connection = OpenConnection();
+        using var transaction = connection.BeginTransaction();
         using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = "DELETE FROM clipboard_entries WHERE id = $id;";
         command.Parameters.AddWithValue("$id", id);
-        return command.ExecuteNonQuery() > 0;
+        bool deleted = command.ExecuteNonQuery() > 0;
+        transaction.Commit();
+        return deleted;
+    }
+
+    public int ClearUnpinnedClipboardEntries()
+    {
+        using var connection = OpenConnection();
+        using var transaction = connection.BeginTransaction();
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "DELETE FROM clipboard_entries WHERE is_pinned = 0;";
+        int deleted = command.ExecuteNonQuery();
+        transaction.Commit();
+        return deleted;
     }
 
     public DateTimeOffset? GetCountdownTimerEndUtc()

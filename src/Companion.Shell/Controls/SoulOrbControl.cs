@@ -133,6 +133,7 @@ public sealed class SoulOrbControl : FrameworkElement
         Height = 112;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+        IsVisibleChanged += OnVisibilityChanged;
     }
 
     protected override void OnRender(DrawingContext drawingContext)
@@ -249,6 +250,9 @@ public sealed class SoulOrbControl : FrameworkElement
         UpdateAnimationSubscription();
     }
 
+    private void OnVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e) =>
+        UpdateAnimationSubscription();
+
     private void OnRendering(object? sender, EventArgs e)
     {
         var elapsed = _clock.Elapsed;
@@ -269,7 +273,7 @@ public sealed class SoulOrbControl : FrameworkElement
 
     private void UpdateAnimationSubscription()
     {
-        bool shouldAnimate = _isLoaded && _soulState != SoulState.Idle;
+        bool shouldAnimate = _isLoaded && IsVisible && _soulState != SoulState.Idle;
         if (shouldAnimate == _isSubscribed)
         {
             return;

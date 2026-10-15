@@ -85,12 +85,20 @@ public sealed class AudioPlayerService : IDisposable
         {
             if (_output is not null)
             {
-                try { _output.Stop(); } catch { }
+                try { _output.Stop(); }
+                catch (Exception exception)
+                {
+                    SafeDiagnostics.WriteFailure("audio-player", "stop-during-dispose", exception);
+                }
             }
             _buffer.ClearBuffer();
             if (_output is not null)
             {
-                try { _output.Dispose(); } catch { }
+                try { _output.Dispose(); }
+                catch (Exception exception)
+                {
+                    SafeDiagnostics.WriteFailure("audio-player", "dispose-output", exception);
+                }
             }
             _isPlaying = false;
         }

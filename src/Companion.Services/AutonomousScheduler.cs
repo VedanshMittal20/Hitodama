@@ -3,13 +3,16 @@ using Companion.Core;
 
 namespace Companion.Services;
 
-public sealed class AutonomousScheduler : IAsyncDisposable
+public sealed class AutonomousScheduler : IAsyncDisposable, IDisposable
 {
     private readonly DatabaseService _database;
     private readonly Func<ScheduledAction, CancellationToken, Task> _execute;
     private readonly AutoResetEvent _wakeEvent = new(false);
     private readonly CancellationTokenSource _shutdown = new();
+    private readonly object _lifecycleSync = new();
     private Task? _runner;
+    private Task? _disposeTask;
+    private int _disposeStarted;
 
     public event Action<ScheduledAction>? ActionCompleted;
     public event Action<ScheduledAction, Exception>? ActionFailed;
@@ -26,15 +29,35 @@ public sealed class AutonomousScheduler : IAsyncDisposable
 
     public void Start()
     {
-        if (_runner is not null)
+        lock (_lifecycleSync)
         {
-            throw new InvalidOperationException("The autonomous scheduler is already running.");
-        }
+            ObjectDisposedException.ThrowIf(_disposeTask is not null, this);
+            if (_runner is not null)
+            {
+                throw new InvalidOperationException("The autonomous scheduler is already running.");
+            }
 
-        _runner = Task.Run(() => RunAsync(_shutdown.Token));
+            _runner = Task.Run(() => RunAsync(_shutdown.Token));
+        }
     }
 
-    public void Wake() => _wakeEvent.Set();
+    public void Wake()
+    {
+        if (Volatile.Read(ref _disposeStarted) != 0)
+        {
+            return;
+        }
+
+        try
+        {
+            _wakeEvent.Set();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Another DisposeAsync caller already closed the wake event.
+            // A database change may race with final shutdown.
+        }
+    }
 
     private async Task RunAsync(CancellationToken cancellationToken)
     {
@@ -123,17 +146,60 @@ public sealed class AutonomousScheduler : IAsyncDisposable
         return nextLocal.ToUniversalTime();
     }
 
-    public async ValueTask DisposeAsync()
+    public void Dispose()
     {
-        _database.ScheduledActionsChanged -= Wake;
-        await _shutdown.CancelAsync();
-        _wakeEvent.Set();
-        if (_runner is not null)
+        DisposeAsync().AsTask().GetAwaiter().GetResult();
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        lock (_lifecycleSync)
         {
-            await _runner;
+            _disposeTask ??= DisposeCoreAsync();
+            return new ValueTask(_disposeTask);
+        }
+    }
+
+    private async Task DisposeCoreAsync()
+    {
+        Interlocked.Exchange(ref _disposeStarted, 1);
+        _database.ScheduledActionsChanged -= Wake;
+
+        Task cancellation = _shutdown.CancelAsync();
+        try
+        {
+            _wakeEvent.Set();
+        }
+        catch (ObjectDisposedException)
+        {
+            // A concurrent teardown already closed the wake event.
         }
 
-        _shutdown.Dispose();
-        _wakeEvent.Dispose();
+        try
+        {
+            await cancellation.ConfigureAwait(false);
+            Task? runner = _runner;
+            if (runner is not null)
+            {
+                try
+                {
+                    await runner.WaitAsync(TimeSpan.FromMilliseconds(500)).ConfigureAwait(false);
+                }
+                catch (TimeoutException)
+                {
+                    // Disposal stays bounded if an action callback ignores cancellation.
+                }
+                catch (OperationCanceledException)
+                {
+                    // The scheduler runner is expected to stop through cancellation.
+                }
+            }
+        }
+        finally
+        {
+            _shutdown.Dispose();
+            _wakeEvent.Dispose();
+        }
     }
 }
+

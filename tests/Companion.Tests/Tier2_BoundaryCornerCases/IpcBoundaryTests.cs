@@ -1,5 +1,6 @@
 using System;
 using System.Text.Json;
+using Companion.Core;
 using FluentAssertions;
 using Xunit;
 
@@ -7,6 +8,18 @@ namespace Companion.Tests.Tier2_BoundaryCornerCases;
 
 public sealed class IpcBoundaryTests
 {
+    [Fact]
+    public async Task IpcServer_DisposeWhileWaitingForConnection_ClosesListenerPromptly()
+    {
+        string pipeName = $"void-ipc-dispose-{Guid.NewGuid():N}";
+        var server = new CompanionIpcServer(pipeName);
+        server.Start();
+
+        Func<Task> dispose = async () => await server.DisposeAsync();
+        await dispose().WaitAsync(TimeSpan.FromSeconds(2));
+        await dispose().WaitAsync(TimeSpan.FromSeconds(2));
+    }
+
     [Fact]
     public void JsonRpc_HugePayloadArguments_ParsesWithoutTruncation()
     {

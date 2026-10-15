@@ -7,6 +7,10 @@ using System.Windows.Interop;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using System.Windows.Threading;
+using Windows.Graphics.Imaging;
+using Windows.Media.Ocr;
+using Windows.Storage.Streams;
 using Companion.Services;
 using Brush = System.Windows.Media.Brush;
 using Color = System.Windows.Media.Color;
@@ -14,6 +18,8 @@ using MouseEventArgs = System.Windows.Input.MouseEventArgs;
 using Point = System.Windows.Point;
 using PixelFormat = System.Drawing.Imaging.PixelFormat;
 using Rectangle = System.Drawing.Rectangle;
+using Clipboard = System.Windows.Clipboard;
+using TextDataFormat = System.Windows.TextDataFormat;
 
 namespace Companion.Shell.Windows;
 
@@ -69,6 +75,9 @@ public partial class CircleToAskOverlay : Window, IDisposable
     private bool _endingCapture;
     private bool _disposed;
 
+    public event Action<string>? OfflineOcrExtracted;
+    public string? LastOcrText { get; private set; }
+
     public CircleToAskOverlay()
     {
         InitializeComponent();
@@ -113,7 +122,7 @@ public partial class CircleToAskOverlay : Window, IDisposable
         _requestCancellation = new CancellationTokenSource();
         try
         {
-            _microphone.StartRecording();
+            _microphone.Start(bypassVadGate: true);
             _isCapturing = true;
         }
         catch
@@ -138,7 +147,7 @@ public partial class CircleToAskOverlay : Window, IDisposable
         var endingCompletion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _endingCompletion = endingCompletion;
         InkCanvas.ReleaseMouseCapture();
-        Hide();
+        Visibility = Visibility.Hidden;
         CancellationTokenSource request = _requestCancellation
             ?? throw new InvalidOperationException("Circle to Ask capture was not initialized.");
         using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
@@ -146,11 +155,22 @@ public partial class CircleToAskOverlay : Window, IDisposable
             cancellationToken);
         try
         {
-            await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Render);
-            await Task.Delay(40, linkedCancellation.Token);
+            linkedCancellation.Token.ThrowIfCancellationRequested();
+            await System.Windows.Threading.Dispatcher.Yield(DispatcherPriority.Render);
+            linkedCancellation.Token.ThrowIfCancellationRequested();
 
             byte[] image = CaptureSelection();
             byte[] audio = await _microphone.StopRecordingAsPcmAsync(linkedCancellation.Token);
+            try
+            {
+                LastOcrText = await ExtractTextFromImageAsync(image);
+            }
+            catch (Exception exception)
+            {
+                LastOcrText = null;
+                SafeDiagnostics.WriteFailure("circle-to-ask", "optional-ocr-context", exception);
+            }
+
             return (image, audio);
         }
         finally
@@ -237,6 +257,45 @@ public partial class CircleToAskOverlay : Window, IDisposable
 
     private void OnMouseUp(object sender, MouseButtonEventArgs e) => InkCanvas.ReleaseMouseCapture();
 
+    public static async Task<string> ExtractTextFromImageAsync(byte[] imageBytes)
+    {
+        if (imageBytes is null || imageBytes.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            using var stream = new InMemoryRandomAccessStream();
+            using (var writer = new DataWriter(stream))
+            {
+                writer.WriteBytes(imageBytes);
+                await writer.StoreAsync();
+                await writer.FlushAsync();
+                writer.DetachStream();
+            }
+
+            stream.Seek(0);
+            BitmapDecoder decoder = await BitmapDecoder.CreateAsync(stream);
+            using SoftwareBitmap bitmap = await decoder.GetSoftwareBitmapAsync(
+                BitmapPixelFormat.Bgra8,
+                BitmapAlphaMode.Premultiplied);
+            OcrEngine? engine = OcrEngine.TryCreateFromUserProfileLanguages();
+            if (engine is null)
+            {
+                return string.Empty;
+            }
+
+            OcrResult result = await engine.RecognizeAsync(bitmap);
+            return result.Text.Trim();
+        }
+        catch (Exception exception)
+        {
+            SafeDiagnostics.WriteFailure("ocr", "extract", exception);
+            return string.Empty;
+        }
+    }
+
     private void UpdateStroke()
     {
         var points = new PointCollection(_lassoPoints);
@@ -253,6 +312,67 @@ public partial class CircleToAskOverlay : Window, IDisposable
         StrokeLineJoin = PenLineJoin.Round,
         IsHitTestVisible = false
     };
+
+    private async void OnOverlayKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape)
+        {
+            e.Handled = true;
+            await CancelCaptureAsync();
+            return;
+        }
+
+        if (e.Key == Key.C && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control && _isCapturing)
+        {
+            e.Handled = true;
+            await TriggerOfflineOcrAsync();
+        }
+    }
+
+    private async void OnMouseRightButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        if (_isCapturing && _lassoPoints.Count >= 3)
+        {
+            await TriggerOfflineOcrAsync();
+        }
+        else
+        {
+            await CancelCaptureAsync();
+        }
+    }
+
+    public async Task TriggerOfflineOcrAsync()
+    {
+        if (!_isCapturing)
+        {
+            return;
+        }
+
+        byte[]? image = null;
+        try
+        {
+            Visibility = Visibility.Hidden;
+            await System.Windows.Threading.Dispatcher.Yield(DispatcherPriority.Render);
+            image = CaptureSelection();
+            await CancelCaptureAsync();
+
+            string recognizedText = await ExtractTextFromImageAsync(image);
+            LastOcrText = recognizedText;
+            OfflineOcrExtracted?.Invoke(recognizedText);
+        }
+        catch (Exception exception)
+        {
+            SafeDiagnostics.WriteFailure("circle-to-ask", "offline-ocr", exception);
+        }
+        finally
+        {
+            if (image is not null)
+            {
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(image);
+            }
+        }
+    }
 
     private byte[] CaptureSelection()
     {

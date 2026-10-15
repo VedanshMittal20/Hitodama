@@ -148,4 +148,18 @@ public sealed class AutonomousSchedulerTests : IDisposable
         var executed = await tcs.Task.WaitAsync(TimeSpan.FromSeconds(3));
         executed.Description.Should().Be("Dynamically added action");
     }
+
+    [Fact]
+    public async Task Scheduler_DisposeWhileIdle_WakesRunnerAndIsIdempotent()
+    {
+        var scheduler = new AutonomousScheduler(_database, (action, ct) => Task.CompletedTask);
+        scheduler.Start();
+
+        Func<Task> dispose = async () => await scheduler.DisposeAsync();
+        await dispose().WaitAsync(TimeSpan.FromSeconds(2));
+        await dispose().WaitAsync(TimeSpan.FromSeconds(2));
+
+        Action wakeAfterDispose = scheduler.Wake;
+        wakeAfterDispose.Should().NotThrow();
+    }
 }

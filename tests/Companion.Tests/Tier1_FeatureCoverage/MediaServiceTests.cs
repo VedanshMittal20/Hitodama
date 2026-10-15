@@ -1,11 +1,54 @@
 using Companion.Services;
 using FluentAssertions;
+using System.IO;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using MediaColor = System.Windows.Media.Color;
 using Xunit;
 
 namespace Companion.Tests.Tier1_FeatureCoverage;
 
 public sealed class MediaServiceTests
 {
+    [Fact]
+    public void MediaService_ExtractAlbumPalette_UsesDefaultsForInvalidThumbnail()
+    {
+        AlbumPalette palette = MediaService.ExtractAlbumPalette([0x01, 0x02, 0x03]);
+
+        palette.Should().Be(AlbumPalette.Default);
+        palette.PrimaryAccent.Should().Be(MediaColor.FromRgb(0x38, 0xBD, 0xF8));
+        palette.SecondaryAccent.Should().Be(MediaColor.FromRgb(0x81, 0x8C, 0xF8));
+    }
+
+    [Fact]
+    public void MediaService_DecodesFrozen32PixelThumbnailAndExtractsChromaticColors()
+    {
+        byte[] pixels =
+        [
+            0, 0, 255, 255, 0, 0, 255, 255,
+            255, 0, 0, 255, 255, 0, 0, 255,
+            0, 0, 0, 255, 255, 255, 255, 255,
+            0, 0, 255, 255, 255, 0, 0, 255
+        ];
+        BitmapSource source = BitmapSource.Create(4, 2, 96, 96, PixelFormats.Bgra32, null, pixels, 16);
+        source.Freeze();
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(source));
+        using var stream = new MemoryStream();
+        encoder.Save(stream);
+
+        BitmapSource? decoded = MediaService.DecodeThumbnail(stream.ToArray());
+        decoded.Should().NotBeNull();
+        decoded!.PixelWidth.Should().Be(32);
+        decoded.PixelHeight.Should().Be(32);
+        decoded.IsFrozen.Should().BeTrue();
+
+        AlbumPalette palette = MediaService.ExtractAlbumPalette(decoded);
+        palette.PrimaryAccent.A.Should().Be(255);
+        palette.SecondaryAccent.A.Should().Be(255);
+        palette.PrimaryAccent.Should().NotBe(AlbumPalette.Default.PrimaryAccent);
+    }
+
     [Fact]
     public async Task MediaService_InstantiatesAndDisposesGracefully()
     {

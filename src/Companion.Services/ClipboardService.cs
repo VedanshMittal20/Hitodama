@@ -9,6 +9,8 @@ namespace Companion.Services;
 
 public sealed class ClipboardService
 {
+    public const int MaxUnpinnedHistoryEntries = 10;
+
     private const int KeyeventfKeyup = 0x0002;
     private const ushort VkControl = 0x11;
     private const ushort VkV = 0x56;
@@ -39,6 +41,26 @@ public sealed class ClipboardService
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern uint SendInput(uint inputCount, Input[] inputs, int inputSize);
+
+    private readonly IDatabaseService _database;
+
+    public ClipboardService(IDatabaseService database)
+    {
+        _database = database ?? throw new ArgumentNullException(nameof(database));
+    }
+
+    public long AddTextToHistory(string text) =>
+        _database.AddClipboardText(text, MaxUnpinnedHistoryEntries);
+
+    public long AddImageToHistory(byte[] pngBytes) =>
+        _database.AddClipboardImage(pngBytes, MaxUnpinnedHistoryEntries);
+
+    public bool SetPinned(long id, bool isPinned) =>
+        _database.SetClipboardPinned(id, isPinned, MaxUnpinnedHistoryEntries);
+
+    public bool DeleteEntry(long id) => _database.DeleteClipboardEntry(id);
+
+    public int ClearUnpinnedHistory() => _database.ClearUnpinnedClipboardEntries();
 
     public static bool IsExcludedFromHistory(IDataObject data)
     {

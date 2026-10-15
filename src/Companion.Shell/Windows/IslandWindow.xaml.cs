@@ -164,8 +164,45 @@ public partial class IslandWindow : Window
     private static extern bool SetProcessWorkingSetSize(IntPtr processHandle, IntPtr minimumWorkingSetSize,
         IntPtr maximumWorkingSetSize);
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct PROCESS_POWER_THROTTLING_STATE
+    {
+        public uint Version;
+        public uint ControlMask;
+        public uint StateMask;
+    }
+
+    private const int ProcessPowerThrottling = 4;
+    private const uint ProcessPowerThrottlingCurrentVersion = 1;
+    private const uint ProcessPowerThrottlingExecutionSpeed = 0x1;
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetProcessInformation(
+        IntPtr hProcess,
+        int ProcessInformationClass,
+        ref PROCESS_POWER_THROTTLING_STATE ProcessInformation,
+        uint ProcessInformationSize);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SYSTEM_POWER_STATUS
+    {
+        public byte ACLineStatus;
+        public byte BatteryFlag;
+        public byte BatteryLifePercent;
+        public byte SystemStatusFlag;
+        public int BatteryLifeTime;
+        public int BatteryFullLifeTime;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetSystemPowerStatus(out SYSTEM_POWER_STATUS lpSystemPowerStatus);
+
+    private const int WmPowerBroadcast = 0x0218;
+    private const int PbtApmPowerStatusChange = 0x000A;
+
     private readonly IslandAnimator _animator = new();
     private readonly DatabaseService _database = new();
+    private readonly LauncherService _launcher = new();
     private readonly IslandActivityCoordinator _activityCoordinator = new();
     private readonly CountdownTimerService _countdownTimer;
     private readonly SystemControlService _systemControls = new();
@@ -175,6 +212,9 @@ public partial class IslandWindow : Window
     private readonly CircleToAskOverlay _circleOverlay;
     private readonly LoadoutIpcServer _ipcServer = new();
     private AutonomousScheduler? _scheduler;
+    private Action<ScheduledAction>? _schedulerCompletedHandler;
+    private Action<ScheduledAction, Exception>? _schedulerFailedHandler;
+    private Action<Exception>? _schedulerStoppedHandler;
     private MicCaptureService? _liveMicrophone;
     private AudioPlayerService? _liveAudioPlayer;
     private GeminiLiveService? _geminiLive;
@@ -218,6 +258,7 @@ public partial class IslandWindow : Window
     public IslandWindow()
     {
         InitializeComponent();
+        TabBar.SizeChanged += OnTabBarSizeChanged;
 
         _activityCoordinator.CurrentActivityChanged += OnCurrentActivityChanged;
         _activityCoordinator.Publish("idle-clock", IslandActivityKind.IdleClock, "Clock", "", lifetime: null);
@@ -225,6 +266,7 @@ public partial class IslandWindow : Window
         _countdownTimer = new CountdownTimerService(_database);
         _countdownTimer.Completed += OnCountdownTimerCompleted;
         _circleOverlay = new CircleToAskOverlay();
+        _circleOverlay.OfflineOcrExtracted += OnOfflineOcrExtracted;
         _gatekeeper = new GatekeeperSecurityEngine(PromptPermissionApprovalAsync, _database);
         _toolExecution = new ToolExecutionService(
             _database,
@@ -264,14 +306,15 @@ public partial class IslandWindow : Window
         _globalInput.DictationReleased += OnDictationReleased;
         _globalInput.CircleToAskStarted += OnCircleToAskStarted;
         _globalInput.CircleToAskReleased += OnCircleToAskReleased;
+        _globalInput.CircleToAskOcrRequested += OnCircleToAskOcrRequested;
         _globalInput.AssistantHotkeyPressed += OnAssistantHotkeyPressed;
         _globalInput.KillSwitchPressed += OnKillSwitchPressed;
-        _globalInput.PermissionAllowPressed += () => OnPermissionAllowClick(this, new RoutedEventArgs());
-        _globalInput.PermissionDenyPressed += () => OnPermissionDenyClick(this, new RoutedEventArgs());
+        _globalInput.PermissionAllowPressed += OnGlobalPermissionAllowPressed;
+        _globalInput.PermissionDenyPressed += OnGlobalPermissionDenyPressed;
         _mouseMonitorTracker.MonitorChanged += OnMouseMonitorChanged;
-        _dictation.AudioLevelChanged += level => CompactSoul.AudioLevel = level;
-        _ipcServer.LoadoutChanged += loadout => Dispatcher.BeginInvoke(() => ApplyLoadout(loadout));
-        _database.ScheduledActionsChanged += () => Dispatcher.BeginInvoke(LoadScheduledActions);
+        _dictation.AudioLevelChanged += OnDictationAudioLevelChanged;
+        _ipcServer.LoadoutChanged += OnLoadoutChanged;
+        _database.ScheduledActionsChanged += OnScheduledActionsChanged;
         SourceInitialized += OnSourceInitialized;
         Loaded += OnLoaded;
         Closed += OnClosed;
@@ -292,7 +335,7 @@ public partial class IslandWindow : Window
         new Dictionary<IslandState, (double Width, double Height, double Radius)>
         {
             [IslandState.Collapsed] = (164, 36, 18),
-            [IslandState.NowBar] = (420, 40, 20),
+            [IslandState.NowBar] = (248, 36, 18),
             [IslandState.CompactLive] = (360, 56, 28),
             [IslandState.VoiceActive] = (440, 180, 28),
             [IslandState.PermissionPrompt] = (440, 180, 28),
@@ -306,33 +349,31 @@ public partial class IslandWindow : Window
         _isReducedMotion = !SystemParameters.ClientAreaAnimation;
     }
 
-    private void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
+    private void CheckBatterySaverStatus()
     {
-        if (e.Category == UserPreferenceCategory.General || e.Category == UserPreferenceCategory.Window)
+        if (GetSystemPowerStatus(out SYSTEM_POWER_STATUS status) && status.SystemStatusFlag == 1)
+        {
+            _isReducedMotion = true;
+        }
+        else
         {
             CheckReducedMotion();
+        }
+    }
+
+    private void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
+    {
+        if (e.Category == UserPreferenceCategory.General || e.Category == UserPreferenceCategory.Window || e.Category == UserPreferenceCategory.Power)
+        {
+            CheckBatterySaverStatus();
         }
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         _idleTrimTimer.Start();
-        CheckReducedMotion();
+        CheckBatterySaverStatus();
         SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
-        TabBar.SizeChanged += (s, ev) =>
-        {
-            if (TabBar.ActualWidth > 0 && TabIndicator is not null)
-            {
-                double tabWidth = TabBar.ActualWidth / 7.0;
-                TabIndicator.Width = tabWidth;
-                _tabIndicatorSpring.Reset(_selectedTab * tabWidth);
-                if (TabIndicatorTransform is not null)
-                {
-                    TabIndicatorTransform.X = _selectedTab * tabWidth;
-                }
-            }
-        };
-
         UpdateContentForState();
         ApplyLoadout(LoadoutStore.Load());
         ClockText.Text = DateTime.Now.ToString("h:mm");
@@ -359,21 +400,55 @@ public partial class IslandWindow : Window
         LoadWifiInfo();
         LoadBluetoothInfo();
         _scheduler = new AutonomousScheduler(_database, ExecuteScheduledActionAsync);
-        _scheduler.ActionCompleted += action => Dispatcher.BeginInvoke(() =>
+        _schedulerCompletedHandler = action => Dispatcher.BeginInvoke(() =>
         {
             LoadScheduledActions();
             ShowCompactMessage($"Scheduled: {action.Description}", Controls.SoulState.Acting, IslandActivityKind.ScheduledAction);
         });
-        _scheduler.ActionFailed += (action, exception) => Dispatcher.BeginInvoke(() =>
+        _schedulerFailedHandler = (action, exception) => Dispatcher.BeginInvoke(() =>
         {
             LoadScheduledActions();
             ShowCompactMessage($"Scheduled action failed: {exception.Message}", Controls.SoulState.Error, IslandActivityKind.Error);
         });
-        _scheduler.SchedulerFailed += exception => Dispatcher.BeginInvoke(() =>
+        _schedulerStoppedHandler = exception => Dispatcher.BeginInvoke(() =>
             ShowCompactMessage($"Scheduler stopped: {exception.Message}", Controls.SoulState.Error));
+        _scheduler.ActionCompleted += _schedulerCompletedHandler;
+        _scheduler.ActionFailed += _schedulerFailedHandler;
+        _scheduler.SchedulerFailed += _schedulerStoppedHandler;
         _scheduler.Start();
-        TrimWorkingSet();
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(TrimWorkingSet));
     }
+
+    private void OnTabBarSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (TabBar.ActualWidth <= 0 || TabIndicator is null)
+        {
+            return;
+        }
+
+        double tabWidth = TabBar.ActualWidth / 7.0;
+        TabIndicator.Width = tabWidth;
+        _tabIndicatorSpring.Reset(_selectedTab * tabWidth);
+        if (TabIndicatorTransform is not null)
+        {
+            TabIndicatorTransform.X = _selectedTab * tabWidth;
+        }
+    }
+
+    private void OnGlobalPermissionAllowPressed() =>
+        Dispatcher.BeginInvoke(() => OnPermissionAllowClick(this, new RoutedEventArgs()));
+
+    private void OnGlobalPermissionDenyPressed() =>
+        Dispatcher.BeginInvoke(() => OnPermissionDenyClick(this, new RoutedEventArgs()));
+
+    private void OnDictationAudioLevelChanged(double level) =>
+        Dispatcher.BeginInvoke(() => CompactSoul.AudioLevel = level);
+
+    private void OnLoadoutChanged(SoulLoadout loadout) =>
+        Dispatcher.BeginInvoke(() => ApplyLoadout(loadout));
+
+    private void OnScheduledActionsChanged() =>
+        Dispatcher.BeginInvoke(LoadScheduledActions);
 
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
@@ -442,6 +517,12 @@ public partial class IslandWindow : Window
         else if (message == WmClipboardUpdate)
         {
             Dispatcher.BeginInvoke(ProcessClipboardUpdate);
+            handled = true;
+            return IntPtr.Zero;
+        }
+        else if (message == WmPowerBroadcast && wParam.ToInt32() == PbtApmPowerStatusChange)
+        {
+            Dispatcher.BeginInvoke(CheckBatterySaverStatus);
             handled = true;
             return IntPtr.Zero;
         }
@@ -575,6 +656,11 @@ public partial class IslandWindow : Window
             state = IslandState.Collapsed;
         }
 
+        if (state is not (IslandState.Collapsed or IslandState.NowBar))
+        {
+            SetEcoQoS(false);
+        }
+
         _state = state;
         IslandContainer.Cursor = state is IslandState.Collapsed or IslandState.NowBar
             ? System.Windows.Input.Cursors.Hand
@@ -610,8 +696,7 @@ public partial class IslandWindow : Window
         (double width, double height, double radius) = StateSizes[state];
         if (state == IslandState.NowBar)
         {
-            bool hasMusic = _mediaService.CurrentTrack?.IsPlaying == true;
-            width = hasMusic ? (_countdownTimer.IsActive ? 420 : 360) : 250;
+            width = 248;
         }
         if (_isReducedMotion)
         {
@@ -684,7 +769,7 @@ public partial class IslandWindow : Window
             return;
         }
 
-        ClockText.Text = DateTime.Now.ToString("h:mm");
+        ClockText.Text = DateTime.Now.ToString("HH:mm");
         long ticksUntilNextMinute = TimeSpan.TicksPerMinute - (DateTime.Now.Ticks % TimeSpan.TicksPerMinute);
         _clockTimer.Interval = TimeSpan.FromTicks(ticksUntilNextMinute);
         if (!_clockTimer.IsEnabled)
@@ -813,12 +898,27 @@ public partial class IslandWindow : Window
         UpdatePersistentIslandState();
     }
 
+    private void OnTimerPresetClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string minText } && int.TryParse(minText, out int minutes))
+        {
+            TimerMinutesInput.Text = minutes.ToString();
+            _countdownTimer.Start(TimeSpan.FromMinutes(minutes));
+            _activityCoordinator.Publish("timer-running", IslandActivityKind.TimerRunning, "Countdown", "Timer is running.");
+            SafeDiagnostics.WriteMetric("timer", "duration-seconds", (long)TimeSpan.FromMinutes(minutes).TotalSeconds);
+            UpdateTimerDisplayState();
+            UpdatePersistentIslandState();
+        }
+    }
+
     private void TrimWorkingSet()
     {
         if (_state != IslandState.Collapsed)
         {
             return;
         }
+
+        SetEcoQoS(true);
 
         GC.Collect(2, GCCollectionMode.Forced, true, true);
         GC.WaitForPendingFinalizers();
@@ -829,6 +929,29 @@ public partial class IslandWindow : Window
             ShowCompactMessage(
                 $"Could not trim idle memory: {new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error()).Message}",
                 Controls.SoulState.Error);
+        }
+    }
+
+    private static void SetEcoQoS(bool enable)
+    {
+        try
+        {
+            var throttlingState = new PROCESS_POWER_THROTTLING_STATE
+            {
+                Version = ProcessPowerThrottlingCurrentVersion,
+                ControlMask = ProcessPowerThrottlingExecutionSpeed,
+                StateMask = enable ? ProcessPowerThrottlingExecutionSpeed : 0
+            };
+            using Process currentProcess = Process.GetCurrentProcess();
+            SetProcessInformation(
+                currentProcess.Handle,
+                ProcessPowerThrottling,
+                ref throttlingState,
+                (uint)Marshal.SizeOf<PROCESS_POWER_THROTTLING_STATE>());
+        }
+        catch
+        {
+            // Silently ignore if unsupported on older Windows builds or restricted environments
         }
     }
 
@@ -1049,6 +1172,7 @@ public partial class IslandWindow : Window
 
     private async void OnAssistantHotkeyPressed()
     {
+        _mouseMonitorTracker.CheckActiveMonitor();
         if (_geminiLive is not null || _voiceSessionStarting)
         {
             await StopLiveVoiceSessionAsync();
@@ -1103,7 +1227,9 @@ public partial class IslandWindow : Window
     {
         try
         {
+            _mouseMonitorTracker.CheckActiveMonitor();
             _systemControls.DuckAudio();
+            _mediaService.SetAudioDucking(true);
             _dictation.Start();
             _activityCoordinator.Publish("dictation", IslandActivityKind.Dictation, "Dictation", "Listening for dictation.");
             CompactTitle.Text = "Dictation";
@@ -1114,6 +1240,7 @@ public partial class IslandWindow : Window
         catch (Exception exception)
         {
             _activityCoordinator.Clear("dictation");
+            _mediaService.SetAudioDucking(false);
             ShowCompactMessage($"Dictation unavailable: {exception.Message}", Controls.SoulState.Error);
         }
     }
@@ -1122,7 +1249,9 @@ public partial class IslandWindow : Window
     {
         try
         {
+            _mouseMonitorTracker.CheckActiveMonitor();
             _systemControls.DuckAudio();
+            _mediaService.SetAudioDucking(true);
             CompactTitle.Text = "Circle to Ask";
             CompactSubtitle.Text = "Circle anything and ask out loud...";
             _activityCoordinator.Publish("circle-to-ask", IslandActivityKind.CircleToAsk, "Circle to Ask", "Select a screen region and ask out loud.");
@@ -1133,6 +1262,7 @@ public partial class IslandWindow : Window
         catch (Exception exception)
         {
             _activityCoordinator.Clear("circle-to-ask");
+            _mediaService.SetAudioDucking(false);
             ShowCompactMessage($"Circle to Ask unavailable: {exception.Message}", Controls.SoulState.Error);
         }
     }
@@ -1140,6 +1270,7 @@ public partial class IslandWindow : Window
     private async void OnCircleToAskReleased()
     {
         _systemControls.UnduckAudio();
+        _mediaService.SetAudioDucking(false);
         if (!_circleOverlay.IsCapturing)
         {
             _activityCoordinator.Clear("circle-to-ask");
@@ -1152,9 +1283,10 @@ public partial class IslandWindow : Window
         try
         {
             (byte[] image, byte[] audio) = await _circleOverlay.EndCaptureAsync();
+            string? ocrContext = _circleOverlay.LastOcrText;
             try
             {
-                await StartLiveVoiceSessionAsync(image, audio);
+                await StartLiveVoiceSessionAsync(image, audio, ocrContext);
             }
             finally
             {
@@ -1164,6 +1296,7 @@ public partial class IslandWindow : Window
         }
         catch (OperationCanceledException)
         {
+            // Releasing the Circle to Ask hotkey cancels the pending capture by design.
         }
         catch (Exception exception)
         {
@@ -1172,7 +1305,44 @@ public partial class IslandWindow : Window
         }
     }
 
-    private async Task StartLiveVoiceSessionAsync(byte[]? initialImage = null, byte[]? initialAudio = null)
+    private void OnCircleToAskOcrRequested()
+    {
+        if (_circleOverlay.IsCapturing)
+        {
+            _ = _circleOverlay.TriggerOfflineOcrAsync();
+        }
+    }
+
+    private void OnOfflineOcrExtracted(string recognizedText)
+    {
+        _systemControls.UnduckAudio();
+        _mediaService.SetAudioDucking(false);
+        _activityCoordinator.Clear("circle-to-ask");
+        if (string.IsNullOrWhiteSpace(recognizedText))
+        {
+            ShowCompactMessage("No text was recognized in that region.", Controls.SoulState.Error);
+            return;
+        }
+
+        try
+        {
+            _suppressClipboardRecording = true;
+            Clipboard.SetText(recognizedText, TextDataFormat.UnicodeText);
+            _database.AddClipboardText(recognizedText);
+            LoadClipboardEntries();
+            ClipboardPreview.Text = "Text copied from the circled region.";
+            ReleaseClipboardSuppressionAfterUpdate();
+            ShowCompactMessage("Text copied from the circled region.", Controls.SoulState.Acting, IslandActivityKind.Clipboard);
+        }
+        catch (Exception exception)
+        {
+            _suppressClipboardRecording = false;
+            SafeDiagnostics.WriteFailure("circle-to-ask", "copy-ocr-text", exception);
+            ShowCompactMessage("Could not copy recognized text.", Controls.SoulState.Error);
+        }
+    }
+
+    private async Task StartLiveVoiceSessionAsync(byte[]? initialImage = null, byte[]? initialAudio = null, string? ocrContext = null)
     {
         if (_geminiLive is not null || _voiceSessionStarting)
         {
@@ -1188,6 +1358,7 @@ public partial class IslandWindow : Window
 
         _voiceSessionStarting = true;
         _liveVoiceFailureReported = false;
+        _mediaService.SetAudioDucking(true);
         _activityCoordinator.Publish(
             "voice-session",
             initialImage is null ? IslandActivityKind.Voice : IslandActivityKind.CircleToAsk,
@@ -1210,25 +1381,26 @@ public partial class IslandWindow : Window
         microphone.PcmChunkAvailable += liveSession.SendAudioChunk;
         microphone.AudioStreamEnded += liveSession.EndAudioStream;
         microphone.AudioLevelChanged += level => Dispatcher.BeginInvoke(() => CompactSoul.AudioLevel = level);
-        liveSession.InputTranscriptReceived += transcript => Dispatcher.BeginInvoke(() =>
+        liveSession.UserTranscriptReceived += transcript => Dispatcher.BeginInvoke(() =>
         {
             if (!ReferenceEquals(_geminiLive, liveSession))
             {
                 return;
             }
 
-            CompactTitle.Text = "You said";
-            CompactSubtitle.Text = transcript;
+            VoiceUserSubtitle.Visibility = Visibility.Visible;
+            VoiceUserSubtitle.Text = $"You: {transcript}";
         });
-        liveSession.OutputTranscriptReceived += transcript => Dispatcher.BeginInvoke(() =>
+        liveSession.AssistantTranscriptReceived += transcript => Dispatcher.BeginInvoke(() =>
         {
             if (!ReferenceEquals(_geminiLive, liveSession))
             {
                 return;
             }
 
-            CompactTitle.Text = string.IsNullOrWhiteSpace(_loadout.SoulName) ? "Void" : _loadout.SoulName;
-            CompactSubtitle.Text = transcript;
+            string assistantName = string.IsNullOrWhiteSpace(_loadout.SoulName) ? "Void" : _loadout.SoulName;
+            CompactTitle.Text = assistantName;
+            CompactSubtitle.Text = $"{assistantName}: {transcript}";
         });
         liveSession.SpeakingChanged += speaking => Dispatcher.BeginInvoke(() =>
         {
@@ -1271,7 +1443,7 @@ public partial class IslandWindow : Window
             cancellation.Token.ThrowIfCancellationRequested();
             if (initialImage is not null)
             {
-                await liveSession.SendScreenQuestionAsync(initialImage, initialAudio ?? [], cancellation.Token);
+                await liveSession.SendCircleToAskTurnAsync(initialImage, initialAudio ?? [], ocrContext, cancellation.Token);
             }
 
             microphone.StartRecording(retainAudio: false, streamContinuously: true);
@@ -1325,6 +1497,7 @@ public partial class IslandWindow : Window
     private async Task StopLiveVoiceSessionAsync()
     {
         _voiceSessionCancellation?.Cancel();
+        _mediaService.SetAudioDucking(false);
         _activityCoordinator.Clear("voice-session");
         MicCaptureService? microphone = _liveMicrophone;
         GeminiLiveService? liveSession = _geminiLive;
@@ -1350,12 +1523,15 @@ public partial class IslandWindow : Window
 
         audioPlayer?.Dispose();
         CompactSoul.SoulState = Controls.SoulState.Idle;
+        VoiceUserSubtitle.Visibility = Visibility.Collapsed;
+        VoiceUserSubtitle.Text = string.Empty;
         UpdateVoiceControls();
     }
 
     private async void OnDictationReleased()
     {
         _systemControls.UnduckAudio();
+        _mediaService.SetAudioDucking(false);
         if (!_dictation.IsRecording)
         {
             _activityCoordinator.Clear("dictation");
@@ -1399,6 +1575,8 @@ public partial class IslandWindow : Window
     {
         try
         {
+            _systemControls.UnduckAudio();
+            _mediaService.SetAudioDucking(false);
             if (_voiceSessionStarting)
             {
                 _voiceSessionCancellation?.Cancel();
@@ -1516,15 +1694,19 @@ public partial class IslandWindow : Window
         {
             Interval = interval
         };
-        collapseTimer.Tick += (_, _) =>
+        EventHandler onTick = null!;
+        onTick = (_, _) =>
         {
             collapseTimer.Stop();
+            collapseTimer.Tick -= onTick;
             try
             {
                 onCollapse?.Invoke();
             }
-            catch
+            catch (Exception exception)
             {
+                SafeDiagnostics.WriteFailure("island", "transient-activity-cleanup", exception);
+                ShowCompactMessage("Activity cleanup failed.", Controls.SoulState.Error);
             }
 
             if (_state == expectedState)
@@ -1533,6 +1715,7 @@ public partial class IslandWindow : Window
                 SetState(IslandState.Collapsed);
             }
         };
+        collapseTimer.Tick += onTick;
         collapseTimer.Start();
     }
 
@@ -1844,7 +2027,7 @@ public partial class IslandWindow : Window
 
     private void OnAppSearchChanged(object sender, TextChangedEventArgs e) => UpdateAppResults();
 
-    private void OnAppSearchKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    private async void OnAppSearchKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
         if (e.Key != System.Windows.Input.Key.Enter)
         {
@@ -1855,7 +2038,7 @@ public partial class IslandWindow : Window
             AppResults.Items.Cast<AppShortcut>().FirstOrDefault();
         if (app is not null)
         {
-            LaunchAppShortcut(app);
+            await LaunchAppShortcutAsync(app);
         }
 
         e.Handled = true;
@@ -1871,25 +2054,14 @@ public partial class IslandWindow : Window
         string query = AppSearch.Text.Trim();
         var virtualShortcuts = new List<AppShortcut>();
 
-        if (query.StartsWith(">") && query.Length > 1)
+        if (_launcher.TryEvaluateInstantAnswer(query, out Companion.Services.AppShortcut? instantAnswer) && instantAnswer is not null)
+        {
+            virtualShortcuts.Add(new AppShortcut(instantAnswer.Name, instantAnswer.Path));
+        }
+        else if (query.StartsWith(">") && query.Length > 1)
         {
             string cmd = query[1..].Trim();
             virtualShortcuts.Add(new AppShortcut($"⚡ Run: {cmd}", "cmd:" + cmd));
-        }
-        else if (query.Length >= 2 && (query.Any(c => c is '+' or '-' or '*' or '/' or '%' or '^') || query.All(char.IsDigit)))
-        {
-            try
-            {
-                using var table = new DataTable();
-                var computeResult = table.Compute(query, null);
-                if (computeResult is not null && !string.IsNullOrEmpty(computeResult.ToString()))
-                {
-                    virtualShortcuts.Add(new AppShortcut($"= {computeResult}  (Click to Copy)", "math:" + computeResult));
-                }
-            }
-            catch
-            {
-            }
         }
 
         AppShortcut[] matches = _appShortcuts
@@ -1935,32 +2107,135 @@ public partial class IslandWindow : Window
         return score + (matched * 2) - candidate.Length / 20;
     }
 
-    private void OnAppSelected(object sender, SelectionChangedEventArgs e)
+    private async void OnAppSelected(object sender, SelectionChangedEventArgs e)
     {
         if (AppResults.SelectedItem is AppShortcut app)
         {
-            LaunchAppShortcut(app);
+            await LaunchAppShortcutAsync(app);
         }
     }
 
-    private void LaunchAppShortcut(AppShortcut app)
+    private async Task LaunchAppShortcutAsync(AppShortcut app)
     {
-        if (app.Path.StartsWith("math:"))
+        try
         {
-            Clipboard.SetText(app.Path[5..]);
-            ShowCompactMessage($"Copied {app.Path[5..]}", Controls.SoulState.Acting);
+            if (app.Path.StartsWith("math:") || app.Path.StartsWith("copy:"))
+            {
+                string value = app.Path[5..];
+                Clipboard.SetText(value);
+                ShowCompactMessage($"Copied {value}", Controls.SoulState.Acting);
+            }
+            else if (app.Path.StartsWith("cmd:"))
+            {
+                string command = app.Path[4..].Trim();
+                await ExecuteQuickCommandAsync(command);
+            }
+            else
+            {
+                Process.Start(new ProcessStartInfo(app.Path) { UseShellExecute = true });
+            }
+
+            AppResults.SelectedItem = null;
+            SetState(IslandState.Collapsed);
         }
-        else if (app.Path.StartsWith("cmd:"))
+        catch (Exception exception)
         {
-            Process.Start(new ProcessStartInfo("cmd.exe", $"/k {app.Path[4..]}") { UseShellExecute = true });
+            SafeDiagnostics.WriteFailure("launcher", "execute-shortcut", exception);
+            ShowCompactMessage($"Could not run {app.Name}.", Controls.SoulState.Error);
         }
-        else
+    }
+
+    private async Task ExecuteQuickCommandAsync(string command)
+    {
+        string lower = command.ToLowerInvariant();
+        if (lower.StartsWith("timer"))
         {
-            Process.Start(new ProcessStartInfo(app.Path) { UseShellExecute = true });
+            var match = System.Text.RegularExpressions.Regex.Match(command, @"\d+");
+            if (match.Success && int.TryParse(match.Value, out int minutes) && minutes > 0)
+            {
+                TimerMinutesInput.Text = minutes.ToString();
+                _countdownTimer.Start(TimeSpan.FromMinutes(minutes));
+                _activityCoordinator.Publish("timer-running", IslandActivityKind.TimerRunning, "Countdown", "Timer is running.");
+                SafeDiagnostics.WriteMetric("timer", "duration-seconds", (long)TimeSpan.FromMinutes(minutes).TotalSeconds);
+                UpdateTimerDisplayState();
+                UpdatePersistentIslandState();
+                ShowCompactMessage($"Timer started ({minutes}m)", Controls.SoulState.Acting);
+                return;
+            }
+        }
+        else if (lower.StartsWith("todo"))
+        {
+            string text = command.Length > 4 ? command[4..].Trim() : string.Empty;
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                _database.AddTodo(text);
+                LoadTodos();
+                ShowCompactMessage($"Added todo: {text}", Controls.SoulState.Acting);
+                return;
+            }
+        }
+        else if (lower is "dark mode" or "darkmode")
+        {
+            _systemControls.SetDarkMode(!_systemControls.IsDarkModeEnabled);
+            UpdateDarkModeButton();
+            ShowCompactMessage("Toggled Dark Mode", Controls.SoulState.Acting);
+            return;
+        }
+        else if (lower is "studio")
+        {
+            LaunchStudio();
+            return;
+        }
+        else if (lower is "mute")
+        {
+            _systemControls.SetMuted(!_systemControls.IsMuted);
+            ShowCompactMessage("Toggled Mute", Controls.SoulState.Acting);
+            return;
+        }
+        else if (lower is "lock")
+        {
+            if (!LockWorkStation())
+            {
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+            }
+            return;
+        }
+        else if (lower is "sleep")
+        {
+            SetSuspendState(false, true, true);
+            return;
+        }
+        else if (lower is "shutdown")
+        {
+            Process.Start(new ProcessStartInfo("shutdown.exe", "/s /t 0") { UseShellExecute = true });
+            return;
+        }
+        else if (lower is "restart")
+        {
+            Process.Start(new ProcessStartInfo("shutdown.exe", "/r /t 0") { UseShellExecute = true });
+            return;
+        }
+        else if (lower.StartsWith("wifi"))
+        {
+            bool enabled = lower.StartsWith("wifi on", StringComparison.Ordinal)
+                ? true
+                : lower.StartsWith("wifi off", StringComparison.Ordinal)
+                    ? false
+                    : !_systemControls.GetWifiEnabled();
+            await _systemControls.SetWifiEnabledAsync(enabled);
+            LoadWifiInfo();
+            ShowCompactMessage(enabled ? "Wi-Fi enabled" : "Wi-Fi disabled", Controls.SoulState.Acting);
+            return;
         }
 
-        AppResults.SelectedItem = null;
-        SetState(IslandState.Collapsed);
+        try
+        {
+            Process.Start(new ProcessStartInfo("cmd.exe", $"/k {command}") { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            SafeDiagnostics.WriteFailure("launcher", "command", ex);
+        }
     }
 
     private void LoadWallpapers()
@@ -2114,6 +2389,83 @@ public partial class IslandWindow : Window
         ClipboardPreview.Text = "Clipboard item deleted.";
     }
 
+    private void OnClipboardOpenUrlClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: long id } ||
+            _clipboardEntries.FirstOrDefault(entry => entry.Id == id) is not ClipEntry entry ||
+            !Uri.TryCreate(entry.TextOrImagePath, UriKind.Absolute, out Uri? uri) ||
+            (!string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) &&
+             !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+        {
+            ClipboardPreview.Text = "This clipboard item is not a valid web address.";
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
+            ClipboardPreview.Text = "Opened URL in your browser.";
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or
+                                          System.ComponentModel.Win32Exception or
+                                          System.Runtime.InteropServices.ExternalException)
+        {
+            ClipboardPreview.Text = "Could not open this URL.";
+            SafeDiagnostics.WriteFailure("clipboard", "open-url", exception);
+        }
+    }
+
+    private void OnClipboardFormatJsonClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: long id } ||
+            _clipboardEntries.FirstOrDefault(entry => entry.Id == id) is not ClipEntry entry)
+        {
+            return;
+        }
+
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(entry.TextOrImagePath);
+            string formatted = JsonSerializer.Serialize(
+                document.RootElement,
+                new JsonSerializerOptions { WriteIndented = true });
+
+            _suppressClipboardRecording = true;
+            Clipboard.SetText(formatted, TextDataFormat.UnicodeText);
+            _database.AddClipboardText(formatted);
+            LoadClipboardEntries();
+            ClipboardPreview.Text = "Formatted JSON copied to the clipboard.";
+            ReleaseClipboardSuppressionAfterUpdate();
+        }
+        catch (Exception exception) when (exception is JsonException or
+                                          System.Runtime.InteropServices.ExternalException or
+                                          InvalidOperationException or CryptographicException)
+        {
+            _suppressClipboardRecording = false;
+            ClipboardPreview.Text = exception is JsonException
+                ? "Could not format this JSON item."
+                : "Could not copy the formatted JSON.";
+            SafeDiagnostics.WriteFailure("clipboard", "format-json", exception);
+        }
+    }
+
+    private void ReleaseClipboardSuppressionAfterUpdate()
+    {
+        var timer = new System.Windows.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(500)
+        };
+        EventHandler onTick = null!;
+        onTick = (_, _) =>
+        {
+            timer.Stop();
+            timer.Tick -= onTick;
+            _suppressClipboardRecording = false;
+        };
+        timer.Tick += onTick;
+        timer.Start();
+    }
+
     private void OnClipboardItemClick(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: long id } ||
@@ -2165,16 +2517,7 @@ public partial class IslandWindow : Window
                 Clipboard.SetText(entry.TextOrImagePath, TextDataFormat.UnicodeText);
             }
 
-            var timer = new System.Windows.Threading.DispatcherTimer
-            {
-                Interval = TimeSpan.FromMilliseconds(500)
-            };
-            timer.Tick += (_, _) =>
-            {
-                timer.Stop();
-                _suppressClipboardRecording = false;
-            };
-            timer.Start();
+            ReleaseClipboardSuppressionAfterUpdate();
 
             Input[] inputs =
             [
@@ -2255,8 +2598,6 @@ public partial class IslandWindow : Window
         });
     }
 
-    private sealed record AppShortcut(string Name, string Path);
-
     private void OnWinEvent(IntPtr hook, uint eventType, IntPtr windowHandle,
         int objectId, int childId, uint eventThreadId, uint eventTime)
     {
@@ -2280,7 +2621,14 @@ public partial class IslandWindow : Window
         if (Visibility != newVisibility)
         {
             Visibility = newVisibility;
-            try { File.AppendAllText(Path.Combine(AppPaths.Root, "shell.log"), $"[{DateTime.UtcNow:u}] Visibility changed to {newVisibility} (SHQueryUserNotificationState={state})\n"); } catch { }
+            try
+            {
+                File.AppendAllText(Path.Combine(AppPaths.Root, "shell.log"), $"[{DateTime.UtcNow:u}] Visibility changed to {newVisibility} (SHQueryUserNotificationState={state})\n");
+            }
+            catch (Exception exception)
+            {
+                System.Diagnostics.Debug.WriteLine($"Could not write visibility diagnostics ({exception.GetType().Name}).");
+            }
         }
     }
 
@@ -2818,12 +3166,34 @@ public partial class IslandWindow : Window
         SystemEvents.DisplaySettingsChanged -= OnDisplayChanged;
         SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
         _idleTrimTimer.Stop();
+        _idleTrimTimer.Tick -= OnIdleTrimTimerTick;
         _mediaProgressTimer.Stop();
         _clockTimer.Stop();
         _timerDisplayTimer.Stop();
+        _timerDisplayTimer.Tick -= OnTimerDisplayTick;
         _mediaProgressTimer.Tick -= OnMediaProgressTick;
         _clockTimer.Tick -= OnClockTick;
-        _timerDisplayTimer.Tick -= OnTimerDisplayTick;
+        _animator.FrameTick -= ApplySpringFrame;
+        _mediaService.TrackChanged -= OnMediaTrackChanged;
+        _mediaService.PlaybackStateChanged -= OnMediaPlaybackStateChanged;
+        _globalInput.DictationStarted -= OnDictationStarted;
+        _globalInput.DictationReleased -= OnDictationReleased;
+        _globalInput.CircleToAskStarted -= OnCircleToAskStarted;
+        _globalInput.CircleToAskReleased -= OnCircleToAskReleased;
+        _globalInput.CircleToAskOcrRequested -= OnCircleToAskOcrRequested;
+        _globalInput.AssistantHotkeyPressed -= OnAssistantHotkeyPressed;
+        _globalInput.KillSwitchPressed -= OnKillSwitchPressed;
+        _globalInput.PermissionAllowPressed -= OnGlobalPermissionAllowPressed;
+        _globalInput.PermissionDenyPressed -= OnGlobalPermissionDenyPressed;
+        _mouseMonitorTracker.MonitorChanged -= OnMouseMonitorChanged;
+        _dictation.AudioLevelChanged -= OnDictationAudioLevelChanged;
+        _circleOverlay.OfflineOcrExtracted -= OnOfflineOcrExtracted;
+        _ipcServer.LoadoutChanged -= OnLoadoutChanged;
+        _database.ScheduledActionsChanged -= OnScheduledActionsChanged;
+        TabBar.SizeChanged -= OnTabBarSizeChanged;
+        SourceInitialized -= OnSourceInitialized;
+        Loaded -= OnLoaded;
+        Closed -= OnClosed;
         if (_windowHandle != IntPtr.Zero)
         {
             RemoveClipboardFormatListener(_windowHandle);
@@ -2850,6 +3220,21 @@ public partial class IslandWindow : Window
 
         if (_scheduler is not null)
         {
+            if (_schedulerCompletedHandler is not null)
+            {
+                _scheduler.ActionCompleted -= _schedulerCompletedHandler;
+            }
+
+            if (_schedulerFailedHandler is not null)
+            {
+                _scheduler.ActionFailed -= _schedulerFailedHandler;
+            }
+
+            if (_schedulerStoppedHandler is not null)
+            {
+                _scheduler.SchedulerFailed -= _schedulerStoppedHandler;
+            }
+
             await _scheduler.DisposeAsync();
         }
 

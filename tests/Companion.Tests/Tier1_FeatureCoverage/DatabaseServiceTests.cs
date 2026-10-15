@@ -243,6 +243,82 @@ public sealed class DatabaseServiceTests : IDisposable
     }
 
     [Fact]
+    public void Clipboard_FivePinnedAndFifteenUnpinned_KeepPinnedAndNewestTenAcrossRestarts()
+    {
+        var pinnedIds = Enumerable.Range(1, 5)
+            .Select(i => _sut.AddClipboardText($"Pinned copy {i}", maxEntries: 200))
+            .ToArray();
+        foreach (long id in pinnedIds)
+        {
+            _sut.SetClipboardPinned(id, true).Should().BeTrue();
+        }
+
+        for (int i = 1; i <= 15; i++)
+        {
+            _sut.AddClipboardText($"Unpinned copy {i}", maxEntries: 200);
+        }
+
+        // Opening an existing database applies the default retention rule transactionally.
+        var reopened = new DatabaseService(_dbPath);
+        var entries = reopened.GetClipboardEntries();
+
+        entries.Should().HaveCount(15);
+        entries.Count(entry => entry.IsPinned).Should().Be(5);
+        entries.Count(entry => !entry.IsPinned).Should().Be(10);
+        entries.Where(entry => entry.IsPinned).Select(entry => entry.TextOrImagePath)
+            .Should().BeEquivalentTo(Enumerable.Range(1, 5).Select(i => $"Pinned copy {i}"));
+        entries.Where(entry => !entry.IsPinned).Select(entry => entry.TextOrImagePath)
+            .Should().BeEquivalentTo(Enumerable.Range(6, 10).Select(i => $"Unpinned copy {i}"));
+
+        var secondReopen = new DatabaseService(_dbPath);
+        secondReopen.GetClipboardEntries().Should().HaveCount(15);
+        secondReopen.GetClipboardEntries().Where(entry => entry.IsPinned).Should().HaveCount(5);
+        secondReopen.GetClipboardEntries().Where(entry => !entry.IsPinned).Should().HaveCount(10);
+    }
+
+    [Fact]
+    public void Clipboard_RecopyingPinnedTextRefreshesTimestampWithoutUnpinningOrDuplicating()
+    {
+        const string pinnedText = "Pinned text to copy again";
+        long pinnedId = _sut.AddClipboardText(pinnedText);
+        _sut.SetClipboardPinned(pinnedId, true).Should().BeTrue();
+
+        using (var connection = new SqliteConnection($"Data Source={_dbPath}"))
+        {
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = "UPDATE clipboard_entries SET created_utc = '2000-01-01T00:00:00.0000000Z' WHERE id = $id;";
+            command.Parameters.AddWithValue("$id", pinnedId);
+            command.ExecuteNonQuery();
+        }
+
+        long recopiedId = _sut.AddClipboardText(pinnedText);
+        var entries = _sut.GetClipboardEntries();
+
+        recopiedId.Should().Be(pinnedId);
+        entries.Should().ContainSingle();
+        entries[0].Id.Should().Be(pinnedId);
+        entries[0].IsPinned.Should().BeTrue();
+        entries[0].CreatedUtc.Should().BeAfter(new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+    }
+
+    [Fact]
+    public void Clipboard_ClearUnpinnedHistory_PreservesEveryPinnedEntry()
+    {
+        long pinned = _sut.AddClipboardText("Keep pinned");
+        _sut.SetClipboardPinned(pinned, true).Should().BeTrue();
+        for (int i = 0; i < 4; i++)
+        {
+            _sut.AddClipboardText($"Remove {i}");
+        }
+
+        _sut.ClearUnpinnedClipboardEntries().Should().Be(4);
+
+        _sut.GetClipboardEntries().Should().ContainSingle()
+            .Which.TextOrImagePath.Should().Be("Keep pinned");
+    }
+
+    [Fact]
     public void Clipboard_AddAndRetrieveImage_ProtectsAndPreservesPngBytes()
     {
         byte[] pngBytes = [137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4];

@@ -21,6 +21,19 @@ public sealed class GlobalInputChordTests
     }
 
     [Fact]
+    public void GlobalInputService_DisposeIsIdempotent_AndPreventsHookRestart()
+    {
+        var service = new GlobalInputService();
+
+        service.Dispose();
+        Action disposeAgain = service.Dispose;
+        disposeAgain.Should().NotThrow();
+
+        Action startAfterDispose = service.Start;
+        startAfterDispose.Should().Throw<ObjectDisposedException>();
+    }
+
+    [Fact]
     public void ChordDurationThresholds_VerifyExactSpecifications()
     {
         // R4 Requirements:

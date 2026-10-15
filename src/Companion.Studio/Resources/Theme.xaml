@@ -5,7 +5,7 @@
                     mc:Ignorable="po">
 
   <ResourceDictionary.MergedDictionaries>
-    <ResourceDictionary Source="Tokens.xaml" />
+    <ResourceDictionary Source="pack://application:,,,/Companion.Studio;component/Resources/Tokens.xaml" />
   </ResourceDictionary.MergedDictionaries>
 
   <!-- Quiet Focus Visual -->

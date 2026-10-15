@@ -47,6 +47,9 @@ public sealed class MouseMonitorTracker : IDisposable
     [DllImport("user32.dll")]
     private static extern IntPtr MonitorFromPoint(NativePoint point, uint flags);
 
+    [DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out NativePoint point);
+
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern IntPtr GetModuleHandle(string? moduleName);
 
@@ -65,19 +68,37 @@ public sealed class MouseMonitorTracker : IDisposable
         _synchronizationContext = SynchronizationContext.Current;
     }
 
-    public void Start()
+    public void CheckActiveMonitor()
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        if (_hook != IntPtr.Zero)
+        if (_disposed)
         {
             return;
         }
 
-        _hook = SetWindowsHookEx(WhMouseLl, _hookCallback, GetModuleHandle(null), 0);
-        if (_hook == IntPtr.Zero)
+        if (GetCursorPos(out NativePoint point))
         {
-            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+            IntPtr monitor = MonitorFromPoint(point, MonitorDefaultToNearest);
+            if (monitor != IntPtr.Zero)
+            {
+                bool changed;
+                lock (_monitorLock)
+                {
+                    changed = monitor != _lastMonitor;
+                    _lastMonitor = monitor;
+                }
+
+                if (changed)
+                {
+                    Dispatch(() => MonitorChanged?.Invoke(point.X, point.Y));
+                }
+            }
         }
+    }
+
+    public void Start()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        CheckActiveMonitor();
     }
 
     private IntPtr OnMouseEvent(int code, IntPtr wParam, IntPtr lParam)

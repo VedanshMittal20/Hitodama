@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net.WebSockets;
 using System.IO;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
 using Companion.Core;
@@ -10,7 +11,13 @@ using Timer = System.Threading.Timer;
 
 namespace Companion.Services;
 
-public sealed class GeminiLiveService : IAsyncDisposable
+public interface IGeminiLiveTranscriptEvents
+{
+    event Action<string, bool>? UserTranscriptReceived;
+    event Action<string, bool>? AssistantTranscriptReceived;
+}
+
+public sealed class GeminiLiveService : IAsyncDisposable, IGeminiLiveTranscriptEvents
 {
     private const string Endpoint =
         "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent";
@@ -19,6 +26,7 @@ public sealed class GeminiLiveService : IAsyncDisposable
     private readonly ToolRegistry? _toolRegistry;
     private readonly Func<string, JsonElement, string, CancellationToken, Task<string>>? _executeTool;
     private readonly Action<bool>? _trackUntrustedContext;
+    private readonly GeminiVisionService? _visionFallback;
     private readonly SemaphoreSlim _sendLock = new(1, 1);
     private readonly Channel<AudioInputMessage> _audioChunks = Channel.CreateBounded<AudioInputMessage>(
         new BoundedChannelOptions(64)
@@ -28,6 +36,7 @@ public sealed class GeminiLiveService : IAsyncDisposable
             SingleWriter = false
         });
     private readonly Timer _inactivityTimer;
+    private readonly StringBuilder _assistantTranscriptBuffer = new();
     private ClientWebSocket? _socket;
     private CancellationTokenSource? _sessionCancellation;
     private Task? _receiveTask;
@@ -37,13 +46,32 @@ public sealed class GeminiLiveService : IAsyncDisposable
     private int _audioInputFailureReported;
     private bool _disposed;
     private bool _sessionSwitchSubscribed;
+    private event Action<string, bool>? UserTranscriptWithFinality;
+    private event Action<string, bool>? AssistantTranscriptWithFinality;
 
     public event Action<string>? InputTranscriptReceived;
     public event Action<string>? OutputTranscriptReceived;
+    // One-argument events remain for the existing shell contract.
+    public event Action<string>? UserTranscriptReceived;
+    public event Action<string>? AssistantTranscriptReceived;
+    public event Action<string>? TranscriptReceived;
     public event Action<bool>? SpeakingChanged;
     public event Action? Interrupted;
     public event Action<Exception>? ConnectionFailed;
     public event Action? SessionEnded;
+    public IGeminiLiveTranscriptEvents TranscriptEvents => this;
+
+    event Action<string, bool>? IGeminiLiveTranscriptEvents.UserTranscriptReceived
+    {
+        add => UserTranscriptWithFinality += value;
+        remove => UserTranscriptWithFinality -= value;
+    }
+
+    event Action<string, bool>? IGeminiLiveTranscriptEvents.AssistantTranscriptReceived
+    {
+        add => AssistantTranscriptWithFinality += value;
+        remove => AssistantTranscriptWithFinality -= value;
+    }
 
     private sealed record AudioInputMessage(byte[]? PcmBytes, bool IsStreamEnd);
 
@@ -53,12 +81,14 @@ public sealed class GeminiLiveService : IAsyncDisposable
         AudioPlayerService audioPlayer,
         ToolRegistry? toolRegistry = null,
         Func<string, JsonElement, string, CancellationToken, Task<string>>? executeTool = null,
-        Action<bool>? trackUntrustedContext = null)
+        Action<bool>? trackUntrustedContext = null,
+        GeminiVisionService? visionFallback = null)
     {
         _audioPlayer = audioPlayer ?? throw new ArgumentNullException(nameof(audioPlayer));
         _toolRegistry = toolRegistry;
         _executeTool = executeTool;
         _trackUntrustedContext = trackUntrustedContext;
+        _visionFallback = visionFallback;
         _inactivityTimer = new Timer(OnInactivityTimeout, null, Timeout.Infinite, Timeout.Infinite);
     }
 
@@ -92,7 +122,7 @@ public sealed class GeminiLiveService : IAsyncDisposable
             SafeDiagnostics.WriteEvent("live", "websocket-connected");
             await SendSetupAsync(loadout, relevantMemories, _sessionCancellation.Token);
             _receiveTask = ReceiveLoopAsync(_sessionCancellation.Token);
-            await _setupComplete.Task.WaitAsync(TimeSpan.FromSeconds(15), _sessionCancellation.Token);
+            await _setupComplete.Task.WaitAsync(TimeSpan.FromSeconds(10), _sessionCancellation.Token);
             SafeDiagnostics.WriteMetric("live", "setup-milliseconds", connectionClock.ElapsedMilliseconds);
             SafeDiagnostics.WriteEvent("live", "setup-complete");
             _sendTask = SendAudioLoopAsync(_sessionCancellation.Token);
@@ -215,24 +245,70 @@ public sealed class GeminiLiveService : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(jpegImage);
         ArgumentNullException.ThrowIfNull(pcmAudio);
+        await SendCircleToAskTurnAsync(jpegImage, pcmAudio, cancellationToken).ConfigureAwait(false);
+    }
+
+    public Task<string?> SendCircleToAskTurnAsync(
+        byte[] jpegBytes,
+        byte[] pcm16kHzBytes,
+        CancellationToken ct) =>
+        SendCircleToAskTurnAsync(jpegBytes, pcm16kHzBytes, ocrContext: null, ct: ct);
+
+    public async Task<string?> SendCircleToAskTurnAsync(
+        byte[] jpegBytes,
+        byte[] pcm16kHzBytes,
+        string? ocrContext = null,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(jpegBytes);
+        ArgumentNullException.ThrowIfNull(pcm16kHzBytes);
+        if (jpegBytes.Length == 0 || pcm16kHzBytes.Length == 0)
+        {
+            throw new ArgumentException("A screen image and recorded question are required.");
+        }
+
+        if (IsConnected)
+        {
+            try
+            {
+                await SendCircleToAskLiveTurnAsync(jpegBytes, pcm16kHzBytes, ct).ConfigureAwait(false);
+                return null;
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                SafeDiagnostics.LogError("live", "Circle to Ask WebSocket failed; using Vision REST fallback.", exception);
+            }
+        }
+
+        GeminiVisionService vision = _visionFallback ?? new GeminiVisionService();
+        using var waveStream = new MemoryStream();
+        using (var writer = new NAudio.Wave.WaveFileWriter(waveStream, new NAudio.Wave.WaveFormat(16000, 16, 1)))
+        {
+            writer.Write(pcm16kHzBytes, 0, pcm16kHzBytes.Length);
+        }
+
+        string answer = await vision.AskAboutScreenAsync(jpegBytes, waveStream.ToArray(), ocrContext, ct).ConfigureAwait(false);
+        OutputTranscriptReceived?.Invoke(answer);
+        AssistantTranscriptReceived?.Invoke(answer);
+        AssistantTranscriptWithFinality?.Invoke(answer, true);
+        TranscriptReceived?.Invoke(answer);
+        return answer;
+    }
+
+    private async Task SendCircleToAskLiveTurnAsync(
+        byte[] jpegBytes,
+        byte[] pcm16kHzBytes,
+        CancellationToken cancellationToken)
+    {
         if (!IsConnected)
         {
-            throw new InvalidOperationException("Gemini Live must be connected before sending a screen question.");
+            throw new InvalidOperationException("Gemini Live must complete setup before sending a screen question.");
         }
 
-        if (jpegImage.Length == 0)
-        {
-            throw new ArgumentException("A screen image is required.", nameof(jpegImage));
-        }
-
-        if (pcmAudio.Length == 0)
-        {
-            throw new ArgumentException("A spoken question is required.", nameof(pcmAudio));
-        }
-
-        // Send the still image and the captured raw PCM together in one realtime input event.
-        // The old mediaChunks array dropped its second item, and clientContent is not the
-        // realtime audio/video transport used by Live sessions.
         await SendJsonAsync(
             new
             {
@@ -241,19 +317,45 @@ public sealed class GeminiLiveService : IAsyncDisposable
                     video = new
                     {
                         mimeType = "image/jpeg",
-                        data = Convert.ToBase64String(jpegImage)
-                    },
-                    audio = new
-                    {
-                        mimeType = "audio/pcm;rate=16000",
-                        data = Convert.ToBase64String(pcmAudio)
+                        data = Convert.ToBase64String(jpegBytes)
                     }
                 }
             },
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
+
+        // 3,200 bytes is 100 ms of 16 kHz, 16-bit mono PCM. Smaller frames keep
+        // each realtime payload modest while preserving every captured sample.
+        const int audioFrameBytes = 3200;
+        for (int offset = 0; offset < pcm16kHzBytes.Length; offset += audioFrameBytes)
+        {
+            int length = Math.Min(audioFrameBytes, pcm16kHzBytes.Length - offset);
+            byte[] frame = pcm16kHzBytes.AsMemory(offset, length).ToArray();
+            try
+            {
+                await SendJsonAsync(
+                    new
+                    {
+                        realtimeInput = new
+                        {
+                            audio = new
+                            {
+                                mimeType = "audio/pcm;rate=16000",
+                                data = Convert.ToBase64String(frame)
+                            }
+                        }
+                    },
+                    cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(frame);
+            }
+        }
+
         await SendJsonAsync(new { realtimeInput = new { audioStreamEnd = true } }, cancellationToken);
-        SafeDiagnostics.WriteMetric("live", "circle-image-bytes", jpegImage.Length);
-        SafeDiagnostics.WriteMetric("live", "circle-pcm-bytes", pcmAudio.Length);
+        await SendJsonAsync(new { clientContent = new { turnComplete = true } }, cancellationToken).ConfigureAwait(false);
+        SafeDiagnostics.WriteMetric("live", "circle-image-bytes", jpegBytes.Length);
+        SafeDiagnostics.WriteMetric("live", "circle-pcm-bytes", pcm16kHzBytes.Length);
         SafeDiagnostics.WriteEvent("live", "circle-question-sent");
     }
 
@@ -319,7 +421,7 @@ public sealed class GeminiLiveService : IAsyncDisposable
         }
 
         var setup = new Dictionary<string, object> { ["setup"] = setupFields };
-        await SendJsonAsync(setup, cancellationToken);
+        await SendJsonAsync(setup, cancellationToken, isSetupMessage: true);
     }
 
     private async Task SendAudioLoopAsync(CancellationToken cancellationToken)
@@ -389,8 +491,15 @@ public sealed class GeminiLiveService : IAsyncDisposable
         }
     }
 
-    private async Task SendJsonAsync<T>(T message, CancellationToken cancellationToken)
+    private async Task SendJsonAsync<T>(T message, CancellationToken cancellationToken, bool isSetupMessage = false)
     {
+        if (!isSetupMessage)
+        {
+            Task setupTask = _setupComplete?.Task
+                ?? throw new InvalidOperationException("Gemini Live setup has not started.");
+            await setupTask.WaitAsync(TimeSpan.FromSeconds(10), cancellationToken).ConfigureAwait(false);
+        }
+
         ClientWebSocket socket = _socket
             ?? throw new InvalidOperationException("Gemini Live is not connected.");
         byte[] payload = JsonSerializer.SerializeToUtf8Bytes(message);
@@ -515,25 +624,55 @@ public sealed class GeminiLiveService : IAsyncDisposable
             Interrupted?.Invoke();
         }
 
-        if ((content.TryGetProperty("inputTranscription", out JsonElement inputTranscript) ||
-             content.TryGetProperty("interimInputTranscription", out inputTranscript)) &&
+        bool inputIsFinal = content.TryGetProperty("inputTranscription", out JsonElement inputTranscript);
+        if (!inputIsFinal)
+        {
+            content.TryGetProperty("interimInputTranscription", out inputTranscript);
+        }
+
+        if (inputTranscript.ValueKind == JsonValueKind.Object &&
             inputTranscript.TryGetProperty("text", out JsonElement inputText))
         {
             string? transcript = inputText.GetString();
             if (!string.IsNullOrWhiteSpace(transcript))
             {
                 InputTranscriptReceived?.Invoke(transcript);
+                UserTranscriptReceived?.Invoke(transcript);
+                UserTranscriptWithFinality?.Invoke(transcript, inputIsFinal);
+                TranscriptReceived?.Invoke(transcript);
             }
         }
 
+        bool assistantIsFinal = content.TryGetProperty("turnComplete", out JsonElement turnComplete) &&
+                                turnComplete.ValueKind == JsonValueKind.True;
+        bool assistantTranscriptReceived = false;
         if (content.TryGetProperty("outputTranscription", out JsonElement outputTranscript) &&
             outputTranscript.TryGetProperty("text", out JsonElement outputText))
         {
             string? transcript = outputText.GetString();
             if (!string.IsNullOrWhiteSpace(transcript))
             {
+                _assistantTranscriptBuffer.Append(transcript);
+                assistantTranscriptReceived = true;
+                string currentTranscript = _assistantTranscriptBuffer.ToString();
                 OutputTranscriptReceived?.Invoke(transcript);
+                AssistantTranscriptReceived?.Invoke(currentTranscript);
+                AssistantTranscriptWithFinality?.Invoke(currentTranscript, assistantIsFinal);
+                TranscriptReceived?.Invoke(transcript);
+                if (assistantIsFinal)
+                {
+                    _assistantTranscriptBuffer.Clear();
+                }
             }
+        }
+
+        if (assistantIsFinal && !assistantTranscriptReceived && _assistantTranscriptBuffer.Length > 0)
+        {
+            string completedTranscript = _assistantTranscriptBuffer.ToString();
+            AssistantTranscriptReceived?.Invoke(completedTranscript);
+            AssistantTranscriptWithFinality?.Invoke(completedTranscript, true);
+            TranscriptReceived?.Invoke(completedTranscript);
+            _assistantTranscriptBuffer.Clear();
         }
 
         if (content.TryGetProperty("modelTurn", out JsonElement modelTurn) &&
@@ -583,6 +722,7 @@ public sealed class GeminiLiveService : IAsyncDisposable
         }
         catch (ObjectDisposedException)
         {
+            // A concurrent disconnect has already disposed the timer.
         }
     }
 
@@ -636,6 +776,7 @@ public sealed class GeminiLiveService : IAsyncDisposable
             }
             catch (OperationCanceledException)
             {
+                // Disconnect intentionally cancels the send loop.
             }
 
             _sendTask = null;

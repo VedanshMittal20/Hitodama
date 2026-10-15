@@ -3,13 +3,14 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Circle to Ask" WindowStyle="None" AllowsTransparency="True"
         Background="#66000000" Topmost="True" ShowInTaskbar="False"
-        ResizeMode="NoResize" ShowActivated="False">
+        ResizeMode="NoResize" ShowActivated="False"
+        KeyDown="OnOverlayKeyDown">
   <Grid>
     <Canvas x:Name="InkCanvas" Background="Transparent"
             MouseLeftButtonDown="OnMouseDown" MouseMove="OnMouseMove"
-            MouseLeftButtonUp="OnMouseUp" />
+            MouseLeftButtonUp="OnMouseUp"
+            MouseRightButtonUp="OnMouseRightButtonUp" />
     <Border HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,24"
-            Width="320"
             Background="{StaticResource Surface1Brush}"
             BorderBrush="{StaticResource StrokeStrongBrush}"
             BorderThickness="1"
@@ -22,6 +23,11 @@
           <TextBlock Text="Ctrl + Shift" FontSize="10.5" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" FontFamily="Consolas, Segoe UI Variable Text" />
         </Border>
         <TextBlock Text="release" Foreground="{StaticResource Text2Brush}" FontSize="11.5" VerticalAlignment="Center" />
+        <TextBlock Text="·" Foreground="{StaticResource Text3Brush}" Margin="6,0" VerticalAlignment="Center" />
+        <Border Background="{StaticResource Surface2Brush}" BorderBrush="{StaticResource StrokeSubtleBrush}" BorderThickness="1" CornerRadius="5" Padding="5,1" VerticalAlignment="Center" Margin="0,0,6,0">
+          <TextBlock Text="Ctrl + C" FontSize="10.5" FontWeight="SemiBold" Foreground="{StaticResource Text1Brush}" FontFamily="Consolas, Segoe UI Variable Text" />
+        </Border>
+        <TextBlock Text="Copy Text (OCR)" Foreground="{StaticResource Text2Brush}" FontSize="11.5" VerticalAlignment="Center" />
       </StackPanel>
     </Border>
   </Grid>

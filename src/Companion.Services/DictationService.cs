@@ -97,7 +97,7 @@ public sealed class DictationService : IDisposable
             throw new InvalidOperationException("There is no active window to receive dictated text.");
         }
 
-        _microphone.StartRecording();
+        _microphone.Start(bypassVadGate: true);
         _isRecording = true;
     }
 

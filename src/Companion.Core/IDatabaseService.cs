@@ -49,8 +49,10 @@ public interface IDatabaseService
     IReadOnlyList<ClipEntry> GetClipboardEntries(int limit = 10);
     long AddClipboardText(string text, int maxEntries = 10);
     long AddClipboardImage(byte[] pngBytes, int maxEntries = 10);
+    bool SetClipboardPinned(long id, bool isPinned, int maxUnpinned = 10);
     bool SetClipboardEntryPinned(long id, bool isPinned);
     bool DeleteClipboardEntry(long id);
+    int ClearUnpinnedClipboardEntries();
 
     // Persistent countdown timer
     DateTimeOffset? GetCountdownTimerEndUtc();

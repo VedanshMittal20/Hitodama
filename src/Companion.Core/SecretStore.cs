@@ -265,7 +265,11 @@ public static class SecretStore
                 MoveWithRetry(path, quarantine);
                 if (File.Exists(path))
                 {
-                    try { File.Delete(path); } catch { }
+                    try { File.Delete(path); }
+                    catch (Exception exception)
+                    {
+                        System.Diagnostics.Trace.TraceWarning("Could not remove a quarantined secret file ({0}).", exception.GetType().Name);
+                    }
                 }
             }
         }
@@ -286,7 +290,11 @@ public static class SecretStore
                     return false;
                 }
 
-                try { File.SetAttributes(path, FileAttributes.Normal); } catch { }
+                try { File.SetAttributes(path, FileAttributes.Normal); }
+                catch (Exception exception)
+                {
+                    System.Diagnostics.Trace.TraceInformation("Could not clear secret file attributes before delete ({0}).", exception.GetType().Name);
+                }
                 File.Delete(path);
                 return true;
             }
@@ -303,7 +311,11 @@ public static class SecretStore
                 return false;
             }
 
-            try { File.SetAttributes(path, FileAttributes.Normal); } catch { }
+            try { File.SetAttributes(path, FileAttributes.Normal); }
+            catch (Exception exception)
+            {
+                System.Diagnostics.Trace.TraceInformation("Could not clear secret file attributes before delete ({0}).", exception.GetType().Name);
+            }
             File.Delete(path);
             return true;
         }
@@ -366,7 +378,11 @@ public static class SecretStore
             {
                 if (File.Exists(destination))
                 {
-                    try { File.SetAttributes(destination, FileAttributes.Normal); } catch { }
+                    try { File.SetAttributes(destination, FileAttributes.Normal); }
+                    catch (Exception exception)
+                    {
+                        System.Diagnostics.Trace.TraceInformation("Could not clear destination attributes before moving a secret ({0}).", exception.GetType().Name);
+                    }
                 }
                 try
                 {
@@ -376,7 +392,11 @@ public static class SecretStore
                 catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
                 {
                     File.Copy(source, destination, overwrite: true);
-                    try { File.Delete(source); } catch { }
+                    try { File.Delete(source); }
+                    catch (Exception exception)
+                    {
+                        System.Diagnostics.Trace.TraceWarning("Could not remove the old secret file after copying it ({0}).", exception.GetType().Name);
+                    }
                     return;
                 }
             }
@@ -390,7 +410,11 @@ public static class SecretStore
 
         if (File.Exists(destination))
         {
-            try { File.SetAttributes(destination, FileAttributes.Normal); } catch { }
+            try { File.SetAttributes(destination, FileAttributes.Normal); }
+            catch (Exception exception)
+            {
+                System.Diagnostics.Trace.TraceInformation("Could not clear destination attributes before moving a secret ({0}).", exception.GetType().Name);
+            }
         }
         try
         {
@@ -399,7 +423,11 @@ public static class SecretStore
         catch
         {
             File.Copy(source, destination, overwrite: true);
-            try { File.Delete(source); } catch { }
+            try { File.Delete(source); }
+            catch (Exception exception)
+            {
+                System.Diagnostics.Trace.TraceWarning("Could not remove the old secret file after copying it ({0}).", exception.GetType().Name);
+            }
         }
     }
 }

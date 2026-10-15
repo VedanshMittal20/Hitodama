@@ -17,15 +17,27 @@ public partial class App : System.Windows.Application
     {
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
         {
-            try { File.AppendAllText(Path.Combine(AppPaths.Root, "shell.log"), $"[{DateTime.UtcNow:u}] [Unhandled] {args.ExceptionObject}\n"); } catch { }
+            try { File.AppendAllText(Path.Combine(AppPaths.Root, "shell.log"), $"[{DateTime.UtcNow:u}] [Unhandled] {args.ExceptionObject}\n"); }
+            catch (Exception loggingException)
+            {
+                System.Diagnostics.Debug.WriteLine($"Could not write unhandled exception log ({loggingException.GetType().Name}).");
+            }
         };
         DispatcherUnhandledException += (_, args) =>
         {
-            try { File.AppendAllText(Path.Combine(AppPaths.Root, "shell.log"), $"[{DateTime.UtcNow:u}] [Dispatcher] {args.Exception}\n"); } catch { }
+            try { File.AppendAllText(Path.Combine(AppPaths.Root, "shell.log"), $"[{DateTime.UtcNow:u}] [Dispatcher] {args.Exception}\n"); }
+            catch (Exception loggingException)
+            {
+                System.Diagnostics.Debug.WriteLine($"Could not write dispatcher exception log ({loggingException.GetType().Name}).");
+            }
         };
         TaskScheduler.UnobservedTaskException += (_, args) =>
         {
-            try { File.AppendAllText(Path.Combine(AppPaths.Root, "shell.log"), $"[{DateTime.UtcNow:u}] [UnobservedTask] {args.Exception}\n"); } catch { }
+            try { File.AppendAllText(Path.Combine(AppPaths.Root, "shell.log"), $"[{DateTime.UtcNow:u}] [UnobservedTask] {args.Exception}\n"); }
+            catch (Exception loggingException)
+            {
+                System.Diagnostics.Debug.WriteLine($"Could not write unobserved task log ({loggingException.GetType().Name}).");
+            }
         };
 
         File.AppendAllText(Path.Combine(AppPaths.Root, "shell.log"), $"[{DateTime.UtcNow:u}] Shell starting...\n");
@@ -48,7 +60,10 @@ public partial class App : System.Windows.Application
         {
             _trayIcon?.ShowBalloonTip(3000, "Void", "Void is ready at the top of your screen! Click or scroll to expand.", System.Windows.Forms.ToolTipIcon.Info);
         }
-        catch { }
+        catch (Exception exception)
+        {
+            System.Diagnostics.Debug.WriteLine($"Could not show startup balloon ({exception.GetType().Name}).");
+        }
         File.AppendAllText(Path.Combine(AppPaths.Root, "shell.log"), $"[{DateTime.UtcNow:u}] Shell started successfully.\n");
     }
 
@@ -85,9 +100,9 @@ public partial class App : System.Windows.Application
                 }
             }
         }
-        catch
+        catch (Exception exception)
         {
-            // The executable icon remains available even if tray resource loading fails.
+            System.Diagnostics.Debug.WriteLine($"Could not load tray icon resource ({exception.GetType().Name}); using the application icon.");
         }
 
         return System.Drawing.SystemIcons.Application;

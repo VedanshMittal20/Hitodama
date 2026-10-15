@@ -13,6 +13,7 @@ public sealed class GeminiVisionService
     public async Task<string> AskAboutScreenAsync(
         byte[] jpegImage,
         byte[] wavAudio,
+        string? ocrText = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(jpegImage);
@@ -26,6 +27,16 @@ public sealed class GeminiVisionService
             ?? throw new InvalidOperationException("Add a Gemini API key in Void Studio before using Circle to Ask.");
         string endpoint =
             $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={Uri.EscapeDataString(apiKey)}";
+        var partsList = new List<object>
+        {
+            new { inline_data = new { mime_type = "image/jpeg", data = Convert.ToBase64String(jpegImage) } },
+            new { inline_data = new { mime_type = "audio/wav", data = Convert.ToBase64String(wavAudio) } }
+        };
+        if (!string.IsNullOrWhiteSpace(ocrText))
+        {
+            partsList.Add(new { text = $"[Extracted Screen Text via Offline OCR]:\n{ocrText}" });
+        }
+
         var payload = new
         {
             system_instruction = new
@@ -42,11 +53,7 @@ public sealed class GeminiVisionService
             {
                 new
                 {
-                    parts = new object[]
-                    {
-                        new { inline_data = new { mime_type = "image/jpeg", data = Convert.ToBase64String(jpegImage) } },
-                        new { inline_data = new { mime_type = "audio/wav", data = Convert.ToBase64String(wavAudio) } }
-                    }
+                    parts = partsList.ToArray()
                 }
             }
         };

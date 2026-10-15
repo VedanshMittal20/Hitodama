@@ -1,12 +1,13 @@
 using System.Buffers.Binary;
 using System.IO;
+using NAudio;
 using NAudio.Wave;
 
 namespace Companion.Services;
 
 public sealed class MicCaptureService : IDisposable
 {
-    private const int VoiceHangoverChunks = 28;
+    private const int VoiceHangoverChunks = 18;
     private readonly object _sync = new();
     private readonly SynchronizationContext? _synchronizationContext;
     private WaveInEvent? _waveIn;
@@ -19,6 +20,7 @@ public sealed class MicCaptureService : IDisposable
     private long _speechSegmentCount;
     private bool _retainAudio;
     private bool _streamContinuously;
+    private bool _bypassVadGate;
     private bool _disposed;
 
     public event Action<double>? AudioLevelChanged;
@@ -40,7 +42,10 @@ public sealed class MicCaptureService : IDisposable
         _synchronizationContext = SynchronizationContext.Current;
     }
 
-    public void StartRecording(bool retainAudio = true, bool streamContinuously = false)
+    public void Start(bool bypassVadGate = false) =>
+        StartRecording(retainAudio: true, streamContinuously: false, bypassVadGate: bypassVadGate);
+
+    public void StartRecording(bool retainAudio = true, bool streamContinuously = false, bool bypassVadGate = false)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         lock (_sync)
@@ -58,6 +63,7 @@ public sealed class MicCaptureService : IDisposable
             _speechSegmentCount = 0;
             _retainAudio = retainAudio;
             _streamContinuously = streamContinuously;
+            _bypassVadGate = bypassVadGate;
             _stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             _waveIn = new WaveInEvent
             {
@@ -71,6 +77,18 @@ public sealed class MicCaptureService : IDisposable
             {
                 _waveIn.StartRecording();
             }
+            catch (MmException mmException)
+            {
+                _waveIn.DataAvailable -= OnDataAvailable;
+                _waveIn.RecordingStopped -= OnRecordingStopped;
+                _waveIn.Dispose();
+                _waveIn = null;
+                _pcmBuffer.Dispose();
+                _pcmBuffer = null;
+                _stopped = null;
+                SafeDiagnostics.LogError("mic", "MmException on capture start", mmException);
+                throw;
+            }
             catch (Exception exception)
             {
                 _waveIn.DataAvailable -= OnDataAvailable;
@@ -80,14 +98,14 @@ public sealed class MicCaptureService : IDisposable
                 _pcmBuffer.Dispose();
                 _pcmBuffer = null;
                 _stopped = null;
-                SafeDiagnostics.WriteFailure("mic", "capture-start", exception);
+                SafeDiagnostics.LogError("mic", "capture-start failure", exception);
                 throw;
             }
         }
 
         SafeDiagnostics.WriteEvent(
             "mic",
-            streamContinuously ? "capture-started-continuous" : retainAudio ? "capture-started-retained" : "capture-started-gated");
+            bypassVadGate ? "capture-started-bypass-vad" : streamContinuously ? "capture-started-continuous" : retainAudio ? "capture-started-retained" : "capture-started-gated");
     }
 
     public async Task<byte[]> StopRecordingAsWaveAsync(CancellationToken cancellationToken = default)
@@ -166,6 +184,7 @@ public sealed class MicCaptureService : IDisposable
                 _pcmBuffer?.Dispose();
                 _pcmBuffer = null;
                 _streamContinuously = false;
+                _bypassVadGate = false;
                 _stopped = null;
                 SafeDiagnostics.WriteMetric("mic", "captured-chunks", Interlocked.Read(ref _capturedChunkCount));
                 SafeDiagnostics.WriteMetric("mic", "forwarded-chunks", Interlocked.Read(ref _forwardedChunkCount));
@@ -201,9 +220,12 @@ public sealed class MicCaptureService : IDisposable
             sumSquares += sample * sample;
         }
 
-        double level = Math.Clamp(Math.Sqrt(sumSquares / sampleCount) * 3.5, 0, 1);
+        double rms = Math.Sqrt(sumSquares / sampleCount);
+        double level = Math.Clamp(rms * 3.5, 0, 1);
         DispatchLevel(level);
-        if (level >= 0.025)
+
+        bool hasVoice = (rms * 32768.0) >= 220.0 || level >= 0.025;
+        if (hasVoice)
         {
             _voiceHangoverChunks = VoiceHangoverChunks;
             if (Interlocked.Exchange(ref _voiceActive, 1) == 0)
@@ -219,7 +241,7 @@ public sealed class MicCaptureService : IDisposable
             if (_voiceHangoverChunks == 0 && Interlocked.Exchange(ref _voiceActive, 0) == 1)
             {
                 SafeDiagnostics.WriteEvent("mic", "speech-ended");
-                if (!_streamContinuously)
+                if (!_streamContinuously && !_bypassVadGate)
                 {
                     AudioStreamEnded?.Invoke();
                 }
@@ -227,7 +249,7 @@ public sealed class MicCaptureService : IDisposable
         }
 
         Action<byte[]>? handler = PcmChunkAvailable;
-        if (handler is not null && (_streamContinuously || _voiceHangoverChunks > 0 || level >= 0.025))
+        if (handler is not null && (_streamContinuously || _bypassVadGate || _voiceHangoverChunks > 0 || hasVoice))
         {
             handler(e.Buffer.AsSpan(0, e.BytesRecorded).ToArray());
             Interlocked.Increment(ref _forwardedChunkCount);

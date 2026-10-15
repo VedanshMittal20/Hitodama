@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Diagnostics;
 using System.Threading;
 
 namespace Companion.Core;
@@ -32,7 +33,10 @@ public static class AppPaths
                 Directory.CreateDirectory(env);
                 return env;
             }
-            catch { }
+            catch (Exception exception)
+            {
+                Trace.TraceWarning("VOID_DATA_DIR could not be used ({0}).", exception.GetType().Name);
+            }
         }
 
         string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -109,7 +113,10 @@ public static class AppPaths
                     Directory.Delete(staging, recursive: true);
                 }
             }
-            catch { }
+            catch (Exception exception)
+            {
+                Trace.TraceWarning("Could not remove the incomplete data migration staging directory ({0}).", exception.GetType().Name);
+            }
 
             // Falling back preserves access to existing settings if the copy cannot complete.
             return Directory.Exists(target) ? target : legacy;

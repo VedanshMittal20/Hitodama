@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
 using System.Text;
@@ -205,15 +206,20 @@ public sealed class NewlineIpcFramer : IIpcFramer
 
 // Companion JSON-RPC IPC Server
 
-public sealed class CompanionIpcServer : IAsyncDisposable
+public sealed class CompanionIpcServer : IAsyncDisposable, IDisposable
 {
     private readonly string _pipeName;
     private readonly IIpcFramer _framer;
     private readonly CancellationTokenSource _cts = new();
     private readonly ConcurrentDictionary<Guid, IpcServerSession> _sessions = new();
+    private readonly ConcurrentDictionary<Guid, Task> _sessionTasks = new();
     private readonly ConcurrentDictionary<string, Func<JsonElement?, CancellationToken, Task<object?>>> _methodHandlers = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, Func<JsonElement?, CancellationToken, Task>> _notificationHandlers = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _listenerSync = new();
+    private readonly object _lifecycleSync = new();
+    private NamedPipeServerStream? _listener;
     private Task? _listenerTask;
+    private Task? _disposeTask;
 
     public CompanionIpcServer(string pipeName = IpcConstants.PipeName, IIpcFramer? framer = null)
     {
@@ -229,12 +235,16 @@ public sealed class CompanionIpcServer : IAsyncDisposable
 
     public void Start()
     {
-        if (_listenerTask is not null)
+        lock (_lifecycleSync)
         {
-            throw new InvalidOperationException("The IPC server is already running.");
-        }
+            ObjectDisposedException.ThrowIf(_disposeTask is not null, this);
+            if (_listenerTask is not null)
+            {
+                throw new InvalidOperationException("The IPC server is already running.");
+            }
 
-        _listenerTask = ListenAsync(_cts.Token);
+            _listenerTask = ListenAsync(_cts.Token);
+        }
     }
 
     private async Task ListenAsync(CancellationToken ct)
@@ -251,20 +261,40 @@ public sealed class CompanionIpcServer : IAsyncDisposable
                     PipeTransmissionMode.Byte,
                     PipeOptions.Asynchronous);
 
+                lock (_listenerSync)
+                {
+                    if (ct.IsCancellationRequested)
+                    {
+                        break;
+                    }
+
+                    _listener = pipe;
+                }
+
                 await pipe.WaitForConnectionAsync(ct).ConfigureAwait(false);
+                ClearListener(pipe);
+                if (ct.IsCancellationRequested)
+                {
+                    break;
+                }
 
                 var session = new IpcServerSession(Guid.NewGuid(), pipe, _framer);
                 _sessions[session.Id] = session;
-                _ = Task.Run(() => RunSessionAsync(session, ct), ct);
+                Task sessionTask = Task.Run(() => RunSessionAsync(session, ct), ct);
+                _sessionTasks[session.Id] = sessionTask;
+                _ = sessionTask.ContinueWith(
+                    completedTask => _sessionTasks.TryRemove(session.Id, out Task? removedTask),
+                    CancellationToken.None,
+                    TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default);
+                pipe = null;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
-                pipe?.Dispose();
                 break;
             }
             catch (Exception)
             {
-                pipe?.Dispose();
                 try
                 {
                     await Task.Delay(100, ct).ConfigureAwait(false);
@@ -273,6 +303,25 @@ public sealed class CompanionIpcServer : IAsyncDisposable
                 {
                     break;
                 }
+            }
+            finally
+            {
+                if (pipe is not null)
+                {
+                    ClearListener(pipe);
+                    pipe.Dispose();
+                }
+            }
+        }
+    }
+
+    private void ClearListener(NamedPipeServerStream pipe)
+    {
+        lock (_listenerSync)
+        {
+            if (ReferenceEquals(_listener, pipe))
+            {
+                _listener = null;
             }
         }
     }
@@ -289,9 +338,9 @@ public sealed class CompanionIpcServer : IAsyncDisposable
                 await ProcessIncomingMessageAsync(session, rawJson, ct).ConfigureAwait(false);
             }
         }
-        catch (Exception)
+        catch (Exception exception)
         {
-            // Session closed or disconnected
+            Trace.TraceWarning("IPC session {0} closed after {1}.", session.Id, exception.GetType().Name);
         }
         finally
         {
@@ -307,7 +356,20 @@ public sealed class CompanionIpcServer : IAsyncDisposable
         {
             if (_methodHandlers.TryGetValue("loadout.reload", out var legacyHandler))
             {
-                try { await legacyHandler(null, ct).ConfigureAwait(false); } catch { }
+                try
+                {
+                    await legacyHandler(null, ct).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    Trace.TraceError("Legacy loadout reload failed ({0}).", exception.GetType().Name);
+                    await session.SendMessageRawAsync("error", ct).ConfigureAwait(false);
+                    return;
+                }
             }
 
             await session.SendMessageRawAsync("ok", ct).ConfigureAwait(false);
@@ -390,16 +452,105 @@ public sealed class CompanionIpcServer : IAsyncDisposable
         }
     }
 
-    public async ValueTask DisposeAsync()
+    public void Dispose()
     {
-        await _cts.CancelAsync().ConfigureAwait(false);
-        foreach (var session in _sessions.Values)
-        {
-            await session.DisposeAsync().ConfigureAwait(false);
-        }
+        DisposeAsync().AsTask().GetAwaiter().GetResult();
+    }
 
-        _sessions.Clear();
-        _cts.Dispose();
+    public ValueTask DisposeAsync()
+    {
+        lock (_lifecycleSync)
+        {
+            _disposeTask ??= DisposeCoreAsync();
+            return new ValueTask(_disposeTask);
+        }
+    }
+
+    private async Task DisposeCoreAsync()
+    {
+        try
+        {
+            Task cancellation = _cts.CancelAsync();
+            NamedPipeServerStream? listener;
+            lock (_listenerSync)
+            {
+                listener = _listener;
+                _listener = null;
+            }
+
+            try
+            {
+                listener?.Dispose();
+            }
+            catch
+            {
+                // Closing the listener is best effort during teardown.
+            }
+
+            try
+            {
+                await cancellation.ConfigureAwait(false);
+            }
+            catch
+            {
+                // Continue cleanup even if a cancellation callback faults.
+            }
+
+            if (_listenerTask is not null)
+            {
+                try
+                {
+                    await _listenerTask.WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+                }
+                catch (TimeoutException)
+                {
+                    // Teardown is bounded; a stuck listener must not block process shutdown.
+                }
+                catch (OperationCanceledException)
+                {
+                    // Cancellation is the expected listener shutdown path.
+                }
+            }
+
+            foreach (IpcServerSession session in _sessions.Values)
+            {
+                try
+                {
+                    await session.DisposeAsync().ConfigureAwait(false);
+                }
+                catch
+                {
+                    // A closed session must not prevent the remaining sessions from closing.
+                }
+            }
+
+            Task[] sessionTasks = _sessionTasks.Values.ToArray();
+            if (sessionTasks.Length > 0)
+            {
+                try
+                {
+                    await Task.WhenAll(sessionTasks).WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+                }
+                catch (TimeoutException)
+                {
+                    // Session callbacks are bounded so a broken client cannot hang disposal.
+                }
+                catch (OperationCanceledException)
+                {
+                    // Session cancellation is expected during server shutdown.
+                }
+                catch
+                {
+                    // Session loops isolate protocol failures; ignore any final teardown fault.
+                }
+            }
+        }
+        finally
+        {
+            _sessions.Clear();
+            _sessionTasks.Clear();
+            _cts.Dispose();
+        }
     }
 
     private sealed class IpcServerSession : IAsyncDisposable
@@ -408,6 +559,7 @@ public sealed class CompanionIpcServer : IAsyncDisposable
         public NamedPipeServerStream Stream { get; }
         public IIpcFramer Framer { get; }
         private readonly SemaphoreSlim _writeLock = new(1, 1);
+        private int _disposeStarted;
 
         public IpcServerSession(Guid id, NamedPipeServerStream stream, IIpcFramer framer)
         {
@@ -437,7 +589,11 @@ public sealed class CompanionIpcServer : IAsyncDisposable
 
         public async ValueTask DisposeAsync()
         {
-            _writeLock.Dispose();
+            if (Interlocked.Exchange(ref _disposeStarted, 1) != 0)
+            {
+                return;
+            }
+
             await Stream.DisposeAsync().ConfigureAwait(false);
         }
     }
@@ -452,9 +608,12 @@ public sealed class CompanionIpcClient : IAsyncDisposable
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly ConcurrentDictionary<string, TaskCompletionSource<JsonRpcResponse>> _pending = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource _cts = new();
+    private readonly object _lifecycleSync = new();
     private NamedPipeClientStream? _stream;
     private Task? _readTask;
+    private Task? _disposeTask;
     private long _idCounter;
+    private int _disposeStarted;
 
     public event Action<JsonRpcNotification>? NotificationReceived;
     public event Action<SoulLoadout>? LoadoutChanged;
@@ -471,9 +630,42 @@ public sealed class CompanionIpcClient : IAsyncDisposable
 
     public async Task ConnectAsync(TimeSpan timeout, CancellationToken cancellationToken = default)
     {
-        _stream = new NamedPipeClientStream(".", _pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
-        await _stream.ConnectAsync((int)timeout.TotalMilliseconds, cancellationToken).ConfigureAwait(false);
-        _readTask = Task.Run(() => ReadLoopAsync(_cts.Token));
+        NamedPipeClientStream stream;
+        lock (_lifecycleSync)
+        {
+            ObjectDisposedException.ThrowIf(_disposeTask is not null, this);
+            if (_stream is not null)
+            {
+                throw new InvalidOperationException("The IPC client has already connected or is connecting.");
+            }
+
+            stream = new NamedPipeClientStream(".", _pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+            _stream = stream;
+        }
+
+        try
+        {
+            await stream.ConnectAsync((int)timeout.TotalMilliseconds, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            await stream.DisposeAsync().ConfigureAwait(false);
+            lock (_lifecycleSync)
+            {
+                if (ReferenceEquals(_stream, stream))
+                {
+                    _stream = null;
+                }
+            }
+
+            throw;
+        }
+
+        lock (_lifecycleSync)
+        {
+            ObjectDisposedException.ThrowIf(_disposeTask is not null, this);
+            _readTask = Task.Run(() => ReadLoopAsync(_cts.Token));
+        }
     }
 
     private async Task ReadLoopAsync(CancellationToken ct)
@@ -511,6 +703,24 @@ public sealed class CompanionIpcClient : IAsyncDisposable
         {
             // Client stream ended or canceled
         }
+        finally
+        {
+            if (ct.IsCancellationRequested || _stream?.IsConnected != true)
+            {
+                FailPending(new IOException("The IPC connection closed before the response arrived."));
+            }
+        }
+    }
+
+    private void FailPending(Exception exception)
+    {
+        foreach (KeyValuePair<string, TaskCompletionSource<JsonRpcResponse>> entry in _pending)
+        {
+            if (_pending.TryRemove(entry.Key, out TaskCompletionSource<JsonRpcResponse>? pending))
+            {
+                pending.TrySetException(exception);
+            }
+        }
     }
 
     private void DispatchNotification(JsonRpcNotification notif)
@@ -535,6 +745,7 @@ public sealed class CompanionIpcClient : IAsyncDisposable
 
     public async Task<JsonRpcResponse> SendRequestAsync(string method, object? @params, TimeSpan timeout, CancellationToken ct = default)
     {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposeStarted) != 0, this);
         if (_stream is null || !_stream.IsConnected)
         {
             throw new InvalidOperationException("IPC client is not connected.");
@@ -552,14 +763,27 @@ public sealed class CompanionIpcClient : IAsyncDisposable
         };
         string json = JsonSerializer.Serialize(request);
 
-        await _writeLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            await _framer.WriteMessageAsync(_stream, json, ct).ConfigureAwait(false);
+            await _writeLock.WaitAsync(ct).ConfigureAwait(false);
+            try
+            {
+                if (_stream is null || !_stream.IsConnected)
+                {
+                    throw new IOException("The IPC connection closed before the request could be sent.");
+                }
+
+                await _framer.WriteMessageAsync(_stream, json, ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                _writeLock.Release();
+            }
         }
-        finally
+        catch
         {
-            _writeLock.Release();
+            _pending.TryRemove(id, out _);
+            throw;
         }
 
         using var ctsLinked = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -626,16 +850,66 @@ public sealed class CompanionIpcClient : IAsyncDisposable
         return true;
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
-        await _cts.CancelAsync().ConfigureAwait(false);
-        _writeLock.Dispose();
-        if (_stream is not null)
+        lock (_lifecycleSync)
         {
-            await _stream.DisposeAsync().ConfigureAwait(false);
+            _disposeTask ??= DisposeCoreAsync();
+            return new ValueTask(_disposeTask);
         }
+    }
 
-        _cts.Dispose();
+    private async Task DisposeCoreAsync()
+    {
+        Interlocked.Exchange(ref _disposeStarted, 1);
+        try
+        {
+            Task cancellation = _cts.CancelAsync();
+            NamedPipeClientStream? stream = _stream;
+            _stream = null;
+            if (stream is not null)
+            {
+                try
+                {
+                    await stream.DisposeAsync().ConfigureAwait(false);
+                }
+                catch
+                {
+                    // Continue through cancellation and pending-call cleanup.
+                }
+            }
+
+            try
+            {
+                await cancellation.ConfigureAwait(false);
+            }
+            catch
+            {
+                // Pending calls still need to be failed if a cancellation callback faults.
+            }
+
+            if (_readTask is not null)
+            {
+                try
+                {
+                    await _readTask.WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+                }
+                catch (TimeoutException)
+                {
+                    // The read loop is bounded so disconnect cannot hang disposal.
+                }
+                catch (OperationCanceledException)
+                {
+                    // Cancellation is expected once the client closes.
+                }
+            }
+
+            FailPending(new ObjectDisposedException(nameof(CompanionIpcClient)));
+        }
+        finally
+        {
+            _cts.Dispose();
+        }
     }
 }
 

@@ -78,6 +78,9 @@
             <TextBlock x:Name="CompactTitle" Text="Void" Foreground="{StaticResource TextPrimaryBrush}"
                        FontSize="13" FontWeight="SemiBold"
                        FontFamily="Segoe UI Variable Display, Segoe UI, sans-serif" />
+            <TextBlock x:Name="VoiceUserSubtitle" Text="" Foreground="{StaticResource AccentBrush}"
+                       FontSize="11" FontWeight="Medium" TextWrapping="Wrap" MaxWidth="320" Margin="0,2,0,0"
+                       FontFamily="Segoe UI Variable Display, Segoe UI, sans-serif" Visibility="Collapsed" />
             <TextBlock x:Name="CompactSubtitle" Text="Ready when you are"
                        Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"
                        TextWrapping="Wrap" MaxWidth="320" Margin="0,2,0,0"
@@ -394,8 +397,11 @@
                         <DockPanel LastChildFill="False">
                           <TextBlock Text="Minutes" Foreground="{StaticResource Text2Brush}"
                                      VerticalAlignment="Center" Margin="0,0,8,0" FontSize="11" />
-                          <TextBox x:Name="TimerMinutesInput" Text="5" Width="64" Height="28"
+                          <TextBox x:Name="TimerMinutesInput" Text="5" Width="48" Height="28"
                                    VerticalContentAlignment="Center" ToolTip="1 to 1440 minutes" />
+                          <Button Content="5m" Click="OnTimerPresetClick" Tag="5" Padding="6,2" Margin="6,0,0,0" Style="{StaticResource SecondaryButton}" FontSize="11" />
+                          <Button Content="10m" Click="OnTimerPresetClick" Tag="10" Padding="6,2" Margin="4,0,0,0" Style="{StaticResource SecondaryButton}" FontSize="11" />
+                          <Button Content="25m" Click="OnTimerPresetClick" Tag="25" Padding="6,2" Margin="4,0,0,0" Style="{StaticResource SecondaryButton}" FontSize="11" />
                         </DockPanel>
                       </DockPanel>
                     </Grid>
@@ -498,7 +504,8 @@
                          Background="Transparent">
                   <ListBox.ItemTemplate>
                     <DataTemplate>
-                      <Border Background="{StaticResource Surface1Brush}" BorderBrush="{StaticResource StrokeSubtleBrush}"
+                      <Border Background="{StaticResource Surface1Brush}"
+                              BorderBrush="{Binding IsPinned, Converter={StaticResource ClipboardPinBorderConverter}}"
                               BorderThickness="1" CornerRadius="10" Padding="8,6" Margin="0,2">
                         <DockPanel LastChildFill="True">
                           <Border DockPanel.Dock="Left"
@@ -509,7 +516,19 @@
                                        Foreground="{Binding ContentType, Converter={StaticResource ClipTypeFgConverter}}"
                                        FontSize="10" FontWeight="SemiBold" />
                           </Border>
+                          <Border DockPanel.Dock="Left" Width="14" Height="14" CornerRadius="3" BorderThickness="1" BorderBrush="#40FFFFFF"
+                                  Background="{Binding Text, Converter={StaticResource ClipHexBrushConverter}}"
+                                  Visibility="{Binding Text, Converter={StaticResource ClipIsHexColorConverter}}"
+                                  Margin="0,0,6,0" VerticalAlignment="Center" ToolTip="Color Swatch" />
                           <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Content="Open ↗" Tag="{Binding Id}" Click="OnClipboardOpenUrlClick"
+                                    Visibility="{Binding Text, Converter={StaticResource ClipIsUrlConverter}}"
+                                    Padding="8,0" Height="28" Margin="4,0,0,0" Style="{StaticResource SecondaryButton}"
+                                    VerticalAlignment="Center" FontSize="11" ToolTip="Open URL in browser" />
+                            <Button Content="Format {}" Tag="{Binding Id}" Click="OnClipboardFormatJsonClick"
+                                    Visibility="{Binding Text, Converter={StaticResource ClipIsJsonConverter}}"
+                                    Padding="8,0" Height="28" Margin="4,0,0,0" Style="{StaticResource SecondaryButton}"
+                                    VerticalAlignment="Center" FontSize="11" ToolTip="Format JSON and copy" />
                             <Button Content="Paste" Tag="{Binding Id}"
                                     Click="OnClipboardItemClick" Padding="10,0" Height="28" Margin="6,0,0,0"
                                     Style="{StaticResource SecondaryButton}"

@@ -49,6 +49,30 @@ public static class SafeDiagnostics
                $"exception={SafeToken(exception.GetType().Name)} hresult=0x{exception.HResult:X8}");
     }
 
+    private static readonly System.Text.RegularExpressions.Regex SecretMaskRegex =
+        new(@"(key=|AIza)[A-Za-z0-9_\-]+", System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    public static string MaskSecrets(string input)
+    {
+        if (string.IsNullOrEmpty(input))
+        {
+            return input;
+        }
+
+        return SecretMaskRegex.Replace(input, "$1[REDACTED]");
+    }
+
+    public static void LogError(string component, string message, Exception? exception = null)
+    {
+        if (!IsEnabled)
+        {
+            return;
+        }
+
+        string extra = exception is not null ? $" exception={SafeToken(exception.GetType().Name)} hresult=0x{exception.HResult:X8}" : string.Empty;
+        Append($"[{DateTime.UtcNow:O}] {SafeToken(component)}.error {MaskSecrets(message)}{extra}");
+    }
+
     private static string SafeToken(string value)
     {
         char[] safe = value.Where(character => char.IsAsciiLetterOrDigit(character) || character is '-' or '_')
@@ -61,10 +85,18 @@ public static class SafeDiagnostics
     {
         try
         {
+            line = MaskSecrets(line);
             lock (Sync)
             {
                 Directory.CreateDirectory(AppPaths.Root);
-                File.AppendAllText(Path.Combine(AppPaths.Root, "diagnostics.log"), line + Environment.NewLine);
+                string path = Path.Combine(AppPaths.Root, "diagnostics.log");
+                FileInfo fileInfo = new(path);
+                if (fileInfo.Exists && fileInfo.Length > 512 * 1024)
+                {
+                    File.Delete(path);
+                }
+
+                File.AppendAllText(path, line + Environment.NewLine);
             }
         }
         catch
@@ -73,3 +105,4 @@ public static class SafeDiagnostics
         }
     }
 }
+
