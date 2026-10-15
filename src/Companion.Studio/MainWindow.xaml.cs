@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using Companion.Core;
 using Microsoft.Win32;
 using CheckBox = System.Windows.Controls.CheckBox;
+using Button = System.Windows.Controls.Button;
 using SaveFileDialog = Microsoft.Win32.SaveFileDialog;
 
 namespace Companion.Studio;
@@ -16,14 +17,15 @@ public partial class MainWindow : Window
     private static readonly IReadOnlyDictionary<string, string> PersonalityPrompts =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["True Chad"] = "You are Hitodama, a sharp, ultra-concise, confident desktop soul living on the user's Windows PC. Never waffle. Execute tools decisively and speak in natural, punchy sentences.",
-            ["Minimalist Operator"] = "You are Hitodama, a calm and highly capable Windows desktop assistant. Be brief, precise, and practical. Explain only what the user needs to know.",
-            ["Warm Companion"] = "You are Hitodama, a warm, thoughtful desktop companion. Be kind and clear, but stay concise. Ask for confirmation before risky actions.",
+            ["True Chad"] = "You are Void, a sharp, ultra-concise, confident desktop soul living on the user's Windows PC. Never waffle. Execute tools decisively and speak in natural, punchy sentences.",
+            ["Minimalist Operator"] = "You are Void, a calm and highly capable Windows desktop assistant. Be brief, precise, and practical. Explain only what the user needs to know.",
+            ["Warm Companion"] = "You are Void, a warm, thoughtful desktop companion. Be kind and clear, but stay concise. Ask for confirmation before risky actions.",
             ["Custom Prompt"] = string.Empty
         };
 
     private readonly DatabaseService _database = new();
     private SoulLoadout _loadout = new();
+    private List<MemoryEntry> _allMemories = [];
     private bool _initializing;
 
     public MainWindow()
@@ -33,6 +35,7 @@ public partial class MainWindow : Window
         SoulStyleInput.ItemsSource = Enum.GetValues<SoulVisualStyle>();
         VoiceInput.ItemsSource = Enum.GetValues<VoicePreset>();
         PersonalityInput.ItemsSource = PersonalityPrompts.Keys.ToArray();
+        SelectRailTab(0);
         LoadLoadout();
         LoadMemories();
         LoadAuditLog();
@@ -42,11 +45,85 @@ public partial class MainWindow : Window
         _initializing = false;
     }
 
+    private void OnRailClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string tag } && int.TryParse(tag, out int index))
+        {
+            SelectRailTab(index);
+        }
+    }
+
+    private void SelectRailTab(int index)
+    {
+        SectionSoul.Visibility = index == 0 ? Visibility.Visible : Visibility.Collapsed;
+        SectionVoice.Visibility = index == 1 ? Visibility.Visible : Visibility.Collapsed;
+        SectionAbilities.Visibility = index == 2 ? Visibility.Visible : Visibility.Collapsed;
+        SectionMemories.Visibility = index == 3 ? Visibility.Visible : Visibility.Collapsed;
+        SectionAbout.Visibility = index == 4 ? Visibility.Visible : Visibility.Collapsed;
+
+        UpdateRailButtonStyle(RailSoul, index == 0);
+        UpdateRailButtonStyle(RailVoice, index == 1);
+        UpdateRailButtonStyle(RailAbilities, index == 2);
+        UpdateRailButtonStyle(RailMemories, index == 3);
+        UpdateRailButtonStyle(RailAbout, index == 4);
+    }
+
+    private void UpdateRailButtonStyle(Button button, bool isSelected)
+    {
+        button.Background = isSelected
+            ? (System.Windows.Media.Brush)FindResource("Surface2Brush")
+            : System.Windows.Media.Brushes.Transparent;
+        button.Foreground = isSelected
+            ? (System.Windows.Media.Brush)FindResource("Text1Brush")
+            : (System.Windows.Media.Brush)FindResource("Text2Brush");
+    }
+
+    private void OnLookChipClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string styleName } &&
+            Enum.TryParse<SoulVisualStyle>(styleName, out var style))
+        {
+            SelectVisualStyle(style);
+        }
+    }
+
+    private void SelectVisualStyle(SoulVisualStyle style)
+    {
+        _loadout.VisualStyle = style;
+        SoulStyleInput.SelectedItem = style;
+        if (LiveSoulPreview is not null)
+        {
+            LiveSoulPreview.VisualStyle = style;
+        }
+        UpdateLookChipSelection(style);
+    }
+
+    private void UpdateLookChipSelection(SoulVisualStyle style)
+    {
+        HighlightChip(ChipCyan, style == SoulVisualStyle.VoidFlame);
+        HighlightChip(ChipViolet, style == SoulVisualStyle.CyberOrb);
+        HighlightChip(ChipEmerald, style == SoulVisualStyle.EmeraldSpirit);
+        HighlightChip(ChipAmber, style == SoulVisualStyle.SolarEmber);
+        HighlightChip(ChipCrimson, style == SoulVisualStyle.VoidRipple);
+    }
+
+    private void HighlightChip(Button? button, bool isSelected)
+    {
+        if (button is null) return;
+        button.BorderBrush = isSelected
+            ? (System.Windows.Media.Brush)FindResource("AccentBrush")
+            : (System.Windows.Media.Brush)FindResource("StrokeSubtleBrush");
+        button.BorderThickness = new Thickness(isSelected ? 1.5 : 1.0);
+        button.Background = isSelected
+            ? (System.Windows.Media.Brush)FindResource("Surface3Brush")
+            : (System.Windows.Media.Brush)FindResource("Surface2Brush");
+    }
+
     private void LoadLoadout()
     {
         _loadout = LoadoutStore.Load();
         SoulNameInput.Text = _loadout.SoulName;
-        SoulStyleInput.SelectedItem = _loadout.VisualStyle;
+        SelectVisualStyle(_loadout.VisualStyle);
         PersonalityInput.SelectedItem = PersonalityPrompts.ContainsKey(_loadout.PersonalityName)
             ? _loadout.PersonalityName
             : "Custom Prompt";
@@ -81,11 +158,11 @@ public partial class MainWindow : Window
         try
         {
             _loadout.SoulName = string.IsNullOrWhiteSpace(SoulNameInput.Text)
-                ? "Hitodama"
+                ? "Void"
                 : SoulNameInput.Text.Trim();
             _loadout.VisualStyle = SoulStyleInput.SelectedItem is SoulVisualStyle visualStyle
                 ? visualStyle
-                : SoulVisualStyle.HitodamaFlame;
+                : SoulVisualStyle.VoidFlame;
             _loadout.PersonalityName = PersonalityInput.SelectedItem as string ?? "Custom Prompt";
             _loadout.PersonalityPrompt = PersonalityPromptInput.Text.Trim();
             _loadout.Voice = VoiceInput.SelectedItem is VoicePreset voice
@@ -112,11 +189,11 @@ public partial class MainWindow : Window
             try
             {
                 await LoadoutIpcServer.NotifyLoadoutChangedAsync(TimeSpan.FromSeconds(2));
-                SaveStatus.Text = "Loadout saved and applied to Hitodama Shell.";
+                SaveStatus.Text = "Loadout saved and applied to Void Shell.";
             }
             catch (TimeoutException)
             {
-                SaveStatus.Text = "Loadout saved locally. Hitodama Shell is not running.";
+                SaveStatus.Text = "Loadout saved locally. Void Shell is not running.";
             }
             catch (IOException exception)
             {
@@ -176,8 +253,30 @@ public partial class MainWindow : Window
 
     private void LoadMemories()
     {
-        MemoryList.ItemsSource = _database.GetAllMemories();
+        _allMemories = _database.GetAllMemories().ToList();
+        FilterMemories();
         DeleteMemoryButton.IsEnabled = false;
+    }
+
+    private void OnMemorySearchChanged(object sender, TextChangedEventArgs e)
+    {
+        FilterMemories();
+    }
+
+    private void FilterMemories()
+    {
+        string query = MemorySearchBox?.Text?.Trim() ?? string.Empty;
+        if (string.IsNullOrEmpty(query))
+        {
+            MemoryList.ItemsSource = _allMemories;
+        }
+        else
+        {
+            MemoryList.ItemsSource = _allMemories
+                .Where(m => m.Fact.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                            (m.Tags != null && m.Tags.Contains(query, StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+        }
     }
 
     private void OnMemorySelectionChanged(object sender, SelectionChangedEventArgs e) =>
@@ -196,13 +295,21 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OnDeleteIndividualMemoryClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: long id } && _database.DeleteMemory(id))
+        {
+            LoadMemories();
+        }
+    }
+
     private void OnExportMemoryClick(object sender, RoutedEventArgs e)
     {
         var dialog = new SaveFileDialog
         {
-            Title = "Export Hitodama memories",
+            Title = "Export Void memories",
             Filter = "CSV file (*.csv)|*.csv",
-            FileName = "hitodama-memories.csv"
+            FileName = "void-memories.csv"
         };
         if (dialog.ShowDialog(this) != true)
         {

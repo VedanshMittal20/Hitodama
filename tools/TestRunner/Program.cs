@@ -13,7 +13,7 @@ public static class Program
     public static async Task<int> Main(string[] args)
     {
         Console.WriteLine("=================================================");
-        Console.WriteLine("Hitodama In-Process Test Runner (100% Verification)");
+        Console.WriteLine("Void In-Process Test Runner (100% Verification)");
         Console.WriteLine("=================================================");
 
         var testAssembly = typeof(Companion.Tests.Tier1_FeatureCoverage.SpringSolverTests).Assembly;

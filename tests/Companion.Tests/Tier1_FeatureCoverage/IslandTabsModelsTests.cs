@@ -106,7 +106,7 @@ public sealed class IslandTabsModelsTests
     public void Tab6_Wallpaper_ModelContract_ValidatesNonLockingRequirements()
     {
         // Arrange
-        var wallpaper = new { Path = @"C:\Wallpapers\hitodama_neon.png", Title = "Neon Hitodama" };
+        var wallpaper = new { Path = @"C:\Wallpapers\void_neon.png", Title = "Neon Void" };
 
         // Assert
         wallpaper.Path.Should().EndWith(".png");

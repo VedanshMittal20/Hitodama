@@ -50,8 +50,8 @@ public sealed class ColdStartOnboardingScenarioTests : IDisposable
 
         // 4. Step 3 (Talk): Default Soul Loadout is initialized with 4 slots
         var loadout = new SoulLoadout();
-        loadout.SoulName.Should().Be("Hitodama");
-        loadout.VisualStyle.Should().Be(SoulVisualStyle.HitodamaFlame);
+        loadout.SoulName.Should().Be("Void");
+        loadout.VisualStyle.Should().Be(SoulVisualStyle.VoidFlame);
         loadout.Voice.Should().Be(VoicePreset.Charon);
         loadout.PersonalityName.Should().Be("True Chad");
         loadout.EnabledAbilityPacks.Should().Contain("System");

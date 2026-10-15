@@ -52,9 +52,9 @@ public partial class CircleToAskOverlay : Window, IDisposable
     private readonly List<Point> _lassoPoints = [];
     private readonly MicCaptureService _microphone = new();
     private readonly System.Windows.Shapes.Polyline _outerStroke = CreateStroke(
-        CreateFrozenBrush(Color.FromArgb(105, 56, 189, 248)), 9);
+        CreateFrozenBrush(Color.FromArgb(90, 56, 189, 248)), 4);
     private readonly System.Windows.Shapes.Polyline _innerStroke = CreateStroke(
-        CreateFrozenBrush(Color.FromArgb(245, 245, 253, 255)), 2.5);
+        CreateFrozenBrush(Color.FromArgb(255, 56, 189, 248)), 1.5);
 
     private static SolidColorBrush CreateFrozenBrush(Color color)
     {

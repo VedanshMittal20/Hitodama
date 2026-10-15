@@ -64,7 +64,7 @@ public sealed class DatabaseServiceTests : IDisposable
         // Arrange
         _sut.AddMemory("User's favorite programming language is C# and Rust", "tech,pref");
         _sut.AddMemory("User lives in Bengaluru and works on AI agents", "personal,geo");
-        _sut.AddMemory("Hitodama desktop companion runs at 120Hz spring physics", "companion,ui");
+        _sut.AddMemory("Void desktop companion runs at 120Hz spring physics", "companion,ui");
 
         // Act
         var rustResults = _sut.SearchMemoriesFts("Rust");
@@ -185,6 +185,64 @@ public sealed class DatabaseServiceTests : IDisposable
     }
 
     [Fact]
+    public void Clipboard_DefaultRetentionKeepsNewestTenUnpinnedCopies()
+    {
+        for (int i = 1; i <= 15; i++)
+        {
+            _sut.AddClipboardText($"Recent copy {i}");
+        }
+
+        var entries = _sut.GetClipboardEntries();
+
+        entries.Should().HaveCount(10);
+        entries.Select(entry => entry.TextOrImagePath)
+            .Should().Equal(Enumerable.Range(6, 10).Reverse().Select(i => $"Recent copy {i}"));
+        entries.Should().OnlyContain(entry => !entry.IsPinned);
+    }
+
+    [Fact]
+    public void Clipboard_PinnedCopiesSurviveRetentionAndExistingHistoryIsTrimmedOnReopen()
+    {
+        long firstPinned = _sut.AddClipboardText("Keep this pinned", maxEntries: 200);
+        long secondPinned = _sut.AddClipboardText("Keep this pinned too", maxEntries: 200);
+        _sut.SetClipboardEntryPinned(firstPinned, true).Should().BeTrue();
+        _sut.SetClipboardEntryPinned(secondPinned, true).Should().BeTrue();
+
+        for (int i = 1; i <= 15; i++)
+        {
+            _sut.AddClipboardText($"Old-style copy {i}", maxEntries: 200);
+        }
+
+        // Reopening simulates an existing database receiving the new default retention policy.
+        var reopened = new DatabaseService(_dbPath);
+        var entries = reopened.GetClipboardEntries();
+
+        entries.Should().HaveCount(12);
+        entries.Where(entry => entry.IsPinned).Select(entry => entry.TextOrImagePath)
+            .Should().BeEquivalentTo("Keep this pinned", "Keep this pinned too");
+        entries.Where(entry => !entry.IsPinned).Select(entry => entry.TextOrImagePath)
+            .Should().BeEquivalentTo(Enumerable.Range(6, 10).Select(i => $"Old-style copy {i}"));
+    }
+
+    [Fact]
+    public void Clipboard_UnpinPromotesCopyIntoRecentRetentionPool()
+    {
+        long pinned = _sut.AddClipboardText("Promoted after unpin");
+        _sut.SetClipboardEntryPinned(pinned, true).Should().BeTrue();
+        for (int i = 1; i <= 12; i++)
+        {
+            _sut.AddClipboardText($"Copy {i}");
+        }
+
+        _sut.SetClipboardEntryPinned(pinned, false).Should().BeTrue();
+
+        var entries = _sut.GetClipboardEntries();
+        entries.Should().HaveCount(10);
+        entries.Should().Contain(entry => entry.Id == pinned && !entry.IsPinned);
+        entries.Should().OnlyContain(entry => !entry.IsPinned);
+    }
+
+    [Fact]
     public void Clipboard_AddAndRetrieveImage_ProtectsAndPreservesPngBytes()
     {
         byte[] pngBytes = [137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4];
@@ -195,6 +253,18 @@ public sealed class DatabaseServiceTests : IDisposable
         entry.ContentType.Should().Be("image/png");
         entry.PreviewText.Should().Contain("Image");
         Convert.FromBase64String(entry.TextOrImagePath).Should().Equal(pngBytes);
+    }
+
+    [Fact]
+    public void CountdownTimer_DeadlinePersistsAndCanBeCleared()
+    {
+        DateTimeOffset deadline = DateTimeOffset.UtcNow.AddMinutes(5);
+
+        _sut.SetCountdownTimerEndUtc(deadline);
+
+        _sut.GetCountdownTimerEndUtc().Should().Be(deadline);
+        _sut.ClearCountdownTimer();
+        _sut.GetCountdownTimerEndUtc().Should().BeNull();
     }
 
     [Fact]

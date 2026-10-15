@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:Companion.Shell.Controls"
-        Title="Hitodama" Width="720" Height="520" Top="0"
+        Title="Void" Icon="/Resources/void-logo.png" Width="720" Height="520" Top="0"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         Topmost="True" ShowInTaskbar="False" ResizeMode="NoResize" ShowActivated="False"
         UseLayoutRounding="True" SnapsToDevicePixels="True"
@@ -16,7 +16,7 @@
             Background="{StaticResource IslandGlassBrush}"
             BorderBrush="{StaticResource IslandSpecularBorderBrush}" BorderThickness="1"
             CornerRadius="18" Padding="12,4" ClipToBounds="True"
-            Cursor="Hand" ToolTip="Click or scroll down to open Hitodama dock"
+            Cursor="Hand" ToolTip="Click or scroll down to open Void dock"
             PreviewMouseLeftButtonUp="OnIslandMouseLeftButtonUp">
       <Border.RenderTransform>
         <TranslateTransform x:Name="IslandNudgeTransform" X="0" Y="0" />
@@ -26,9 +26,16 @@
         <StackPanel x:Name="CollapsedContent" Orientation="Horizontal"
                     HorizontalAlignment="Center" VerticalAlignment="Center">
           <controls:SoulOrbControl x:Name="CollapsedSoul" Width="20" Height="20" Margin="0,0,7,0" VerticalAlignment="Center" />
-          <TextBlock x:Name="CollapsedSoulName" Text="Hitodama" Foreground="{StaticResource TextPrimaryBrush}"
+          <TextBlock x:Name="CollapsedSoulName" Text="Void" Foreground="{StaticResource TextPrimaryBrush}"
                      FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"
                      FontFamily="Segoe UI Variable Display, Segoe UI, sans-serif" />
+          <TextBlock x:Name="CollapsedNowPlayingText" Foreground="{StaticResource TextPrimaryBrush}"
+                     FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0"
+                     MaxWidth="132" TextTrimming="CharacterEllipsis" Visibility="Collapsed" />
+          <TextBlock x:Name="CollapsedTimerDivider" Text="·" Foreground="{StaticResource TextMutedBrush}"
+                     FontSize="12" VerticalAlignment="Center" Margin="5,0,5,0" Visibility="Collapsed" />
+          <TextBlock x:Name="CollapsedTimerText" Foreground="{StaticResource SoulCyanBrush}" FontSize="10"
+                     FontWeight="SemiBold" VerticalAlignment="Center" Visibility="Collapsed" />
           <TextBlock x:Name="ClockDivider" Text="·" Foreground="{StaticResource TextMutedBrush}" FontSize="12"
                      VerticalAlignment="Center" Margin="7,0,7,0" />
           <TextBlock x:Name="ClockText" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"
@@ -36,6 +43,18 @@
                      FontFamily="Segoe UI Variable Display, Segoe UI, sans-serif" />
           <controls:EqualizerControl x:Name="CollapsedEqualizer" Margin="8,0,0,0" VerticalAlignment="Center"
                                      Visibility="Collapsed" />
+          <Button x:Name="CollapsedMusicPrevious" Content="⏮" Click="OnMusicPrevClick" Width="23" Height="23"
+                  Padding="0" Margin="5,0,1,0" Background="Transparent" BorderThickness="0"
+                  Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" ToolTip="Previous track"
+                  Visibility="Collapsed" />
+          <Button x:Name="CollapsedMusicPlayPause" Content="⏸" Click="OnMusicPlayPauseClick" Width="23" Height="23"
+                  Padding="0" Margin="1,0" Background="Transparent" BorderThickness="0"
+                  Foreground="{StaticResource TextPrimaryBrush}" FontSize="10" ToolTip="Play / pause"
+                  Visibility="Collapsed" />
+          <Button x:Name="CollapsedMusicNext" Content="⏭" Click="OnMusicNextClick" Width="23" Height="23"
+                  Padding="0" Margin="1,0,0,0" Background="Transparent" BorderThickness="0"
+                  Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" ToolTip="Next track"
+                  Visibility="Collapsed" />
         </StackPanel>
 
         <!-- 2. Compact Live Notification & Live Voice State (360 x 56) -->
@@ -43,6 +62,7 @@
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
           </Grid.ColumnDefinitions>
           <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
             <controls:SoulOrbControl x:Name="CompactSoul" Width="38" Height="38" Margin="2,0,12,0"
@@ -55,7 +75,7 @@
             </Border>
           </StackPanel>
           <StackPanel Grid.Column="1" VerticalAlignment="Center">
-            <TextBlock x:Name="CompactTitle" Text="Hitodama" Foreground="{StaticResource TextPrimaryBrush}"
+            <TextBlock x:Name="CompactTitle" Text="Void" Foreground="{StaticResource TextPrimaryBrush}"
                        FontSize="13" FontWeight="SemiBold"
                        FontFamily="Segoe UI Variable Display, Segoe UI, sans-serif" />
             <TextBlock x:Name="CompactSubtitle" Text="Ready when you are"
@@ -63,48 +83,59 @@
                        TextWrapping="Wrap" MaxWidth="320" Margin="0,2,0,0"
                        FontFamily="Segoe UI Variable Display, Segoe UI, sans-serif" />
           </StackPanel>
+          <Button x:Name="VoiceStopButton" Grid.Column="2" Content="End" Click="OnVoiceStopClick"
+                  Padding="10,5" Margin="8,0,0,0" VerticalAlignment="Center"
+                  ToolTip="End the live voice session" Visibility="Collapsed" />
         </Grid>
 
         <!-- 3. Permission Prompt Modal State (460 x 190) -->
-        <Grid x:Name="PermissionPromptContent" Visibility="Collapsed" Margin="8,6">
-          <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-          </Grid.RowDefinitions>
-          
-          <DockPanel LastChildFill="True">
-            <controls:SoulOrbControl x:Name="PermissionSoul" Width="26" Height="26" Margin="0,0,8,0" DockPanel.Dock="Left" VerticalAlignment="Center" />
-            <TextBlock x:Name="PermissionWarningTitle" Text="Security Confirmation Required"
-                       Foreground="{StaticResource SoulAmberBrush}" FontWeight="SemiBold" FontSize="12.5" VerticalAlignment="Center"
-                       FontFamily="Segoe UI Variable Display, Segoe UI, sans-serif" />
-          </DockPanel>
+        <Border x:Name="PermissionPromptContent" Visibility="Collapsed" Margin="6,4"
+                Background="{StaticResource Surface1Brush}" BorderBrush="{StaticResource StrokeSubtleBrush}"
+                BorderThickness="1" CornerRadius="14" Padding="14,12">
+          <Grid>
+            <!-- 1px Top-edge Amber Specular Highlight -->
+            <Border VerticalAlignment="Top" Height="1" Margin="-14,-12,-14,0"
+                    Background="{StaticResource WarningBrush}" Opacity="0.85" CornerRadius="14,14,0,0" />
 
-          <Border Grid.Row="1" Background="{StaticResource GlassCardBrush}" BorderBrush="{StaticResource GlassCardBorderBrush}"
-                  BorderThickness="1" CornerRadius="10" Padding="10,8" Margin="0,8,0,8">
-            <StackPanel VerticalAlignment="Center">
-              <TextBlock x:Name="PermissionToolName" Text="Tool: Action"
-                         Foreground="{StaticResource TextPrimaryBrush}" FontWeight="SemiBold" FontSize="12" />
-              <TextBlock x:Name="PermissionDescription" Text="Action description"
-                         Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" TextWrapping="Wrap" MaxHeight="52" Margin="0,3,0,0" />
-              <TextBlock x:Name="PermissionArguments" Foreground="{StaticResource TextMutedBrush}"
-                         FontSize="9.5" TextWrapping="Wrap" MaxHeight="38" TextTrimming="CharacterEllipsis" Margin="0,3,0,0"
-                         FontFamily="Cascadia Code, Consolas, monospace" />
-              <TextBlock x:Name="PermissionContextAlert" Text="Context: Untrusted external request"
-                         Foreground="{StaticResource SoulCrimsonBrush}" FontSize="10" FontWeight="SemiBold" Margin="0,3,0,0" Visibility="Collapsed" />
-            </StackPanel>
-          </Border>
+            <Grid Margin="0,2,0,0">
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+              </Grid.RowDefinitions>
+              
+              <DockPanel LastChildFill="True">
+                <controls:SoulOrbControl x:Name="PermissionSoul" Width="26" Height="26" Margin="0,0,8,0" DockPanel.Dock="Left" VerticalAlignment="Center" />
+                <TextBlock x:Name="PermissionWarningTitle" Text="Security Confirmation Required"
+                           Foreground="{StaticResource WarningBrush}" FontWeight="SemiBold" FontSize="12.5" VerticalAlignment="Center"
+                           FontFamily="{StaticResource AppFontFamily}" />
+              </DockPanel>
 
-          <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button x:Name="PermissionDenyButton" Content="Deny" Click="OnPermissionDenyClick"
-                    Background="{StaticResource GlassCardBrush}" Foreground="{StaticResource SoulCrimsonBrush}"
-                    BorderBrush="#44F87171" FontWeight="SemiBold"
-                    Padding="14,6" Margin="0,0,8,0" Style="{StaticResource TileButton}" />
-            <Button x:Name="PermissionAllowButton" Content="Allow" Click="OnPermissionAllowClick"
-                    Background="{StaticResource SoulEmeraldBrush}" Foreground="#FF09090D" FontWeight="SemiBold"
-                    BorderThickness="0" Padding="16,6" Style="{StaticResource TileButton}" />
-          </StackPanel>
-        </Grid>
+              <Border Grid.Row="1" Background="{StaticResource Surface2Brush}" BorderBrush="{StaticResource StrokeSubtleBrush}"
+                      BorderThickness="1" CornerRadius="10" Padding="12,10" Margin="0,8,0,8">
+                <StackPanel VerticalAlignment="Center">
+                  <TextBlock x:Name="PermissionToolName" Text="Tool: Action"
+                             Foreground="{StaticResource Text1Brush}" FontWeight="SemiBold" FontSize="12" />
+                  <TextBlock x:Name="PermissionDescription" Text="Action description"
+                             Foreground="{StaticResource Text2Brush}" FontSize="11" TextWrapping="Wrap" MaxHeight="52" Margin="0,3,0,0" />
+                  <TextBlock x:Name="PermissionArguments" Foreground="{StaticResource Text3Brush}"
+                             FontSize="10" TextWrapping="Wrap" MaxHeight="38" TextTrimming="CharacterEllipsis" Margin="0,3,0,0"
+                             FontFamily="{StaticResource MonoFontFamily}" />
+                  <TextBlock x:Name="PermissionContextAlert" Text="Context: Untrusted external request"
+                             Foreground="{StaticResource DangerBrush}" FontSize="10" FontWeight="SemiBold" Margin="0,3,0,0" Visibility="Collapsed" />
+                </StackPanel>
+              </Border>
+
+              <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="PermissionDenyButton" Content="Deny" Click="OnPermissionDenyClick"
+                        Style="{StaticResource SecondaryButton}" Padding="16,0" Margin="0,0,8,0" />
+                <Button x:Name="PermissionAllowButton" Content="Allow" Click="OnPermissionAllowClick"
+                        Style="{StaticResource PrimaryButton}" Background="{StaticResource SemanticSuccessBrush}"
+                        Foreground="{StaticResource Surface0Brush}" Padding="18,0" />
+              </StackPanel>
+            </Grid>
+          </Grid>
+        </Border>
 
         <!-- 4. Expanded Dock State (640 x 390) -->
         <Grid x:Name="ExpandedContent" Visibility="Collapsed" Opacity="0" Margin="4,2">
@@ -121,7 +152,7 @@
             <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
               <controls:SoulOrbControl x:Name="ExpandedSoul" Width="28" Height="28" Margin="0,0,9,0" VerticalAlignment="Center" />
               <StackPanel VerticalAlignment="Center">
-                <TextBlock x:Name="ExpandedSoulName" Text="Hitodama" Foreground="{StaticResource TextPrimaryBrush}"
+                <TextBlock x:Name="ExpandedSoulName" Text="Void" Foreground="{StaticResource TextPrimaryBrush}"
                            FontSize="13.5" FontWeight="SemiBold"
                            FontFamily="Segoe UI Variable Display, Segoe UI, sans-serif" />
                 <TextBlock x:Name="CurrentTabLabel" Text="Controls" Foreground="{StaticResource SoulCyanBrush}"
@@ -131,8 +162,10 @@
             </StackPanel>
             
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+              <Button x:Name="TalkButton" Content="Talk" Click="OnTalkClick" Margin="0,0,6,0" Padding="10,4"
+                      ToolTip="Start a live voice conversation with Void" />
               <Button Content="Shape" Click="OnStudioClick" Margin="0,0,6,0" Padding="10,4"
-                      ToolTip="Shape your Hitodama in Studio" />
+                      ToolTip="Shape your Void in Studio" />
               <Button Content="×" Width="26" Height="26" Padding="0" FontSize="14"
                       Click="OnCollapseClick" ToolTip="Collapse island" />
             </StackPanel>
@@ -146,22 +179,76 @@
             </Grid.RowDefinitions>
 
             <!-- Floating Glass Segment Tab Controller -->
-            <Border Grid.Row="0" Background="#14141E"
-                    BorderBrush="{StaticResource GlassCardBorderBrush}" BorderThickness="1"
+            <Border Grid.Row="0" Background="{StaticResource Surface0Brush}"
+                    BorderBrush="{StaticResource StrokeSubtleBrush}" BorderThickness="1"
                     CornerRadius="10" Padding="2" Margin="0,0,0,2">
-              <UniformGrid x:Name="TabBar" Columns="7">
-                <Button Content="Controls" Tag="0" Click="OnTabClick" Style="{StaticResource TabPillButton}" />
-                <Button Content="Today" Tag="1" Click="OnTabClick" Style="{StaticResource TabPillButton}" />
-                <Button Content="Stats" Tag="2" Click="OnTabClick" Style="{StaticResource TabPillButton}" />
-                <Button Content="Clipboard" Tag="3" Click="OnTabClick" Style="{StaticResource TabPillButton}" />
-                <Button Content="Apps" Tag="4" Click="OnTabClick" Style="{StaticResource TabPillButton}" />
-                <Button Content="Wallpaper" Tag="5" Click="OnTabClick" Style="{StaticResource TabPillButton}" />
-                <Button Content="Power" Tag="6" Click="OnTabClick" Style="{StaticResource TabPillButton}" />
-              </UniformGrid>
+              <Grid x:Name="TabBarGrid">
+                <!-- Single Sliding Spring Indicator -->
+                <Border x:Name="TabIndicator"
+                        HorizontalAlignment="Left" VerticalAlignment="Stretch"
+                        Background="{StaticResource Surface2Brush}"
+                        BorderBrush="{StaticResource StrokeStrongBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        SnapsToDevicePixels="True">
+                  <Border.RenderTransform>
+                    <TranslateTransform x:Name="TabIndicatorTransform" X="0" />
+                  </Border.RenderTransform>
+                </Border>
+
+                <!-- 7 Tab Buttons with Icon + Label -->
+                <UniformGrid x:Name="TabBar" Columns="7">
+                  <Button Tag="0" Click="OnTabClick" Style="{StaticResource TabPillButton}">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                      <TextBlock Text="🎛" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0" />
+                      <TextBlock x:Name="TabLabel0" Text="Controls" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </Button>
+                  <Button Tag="1" Click="OnTabClick" Style="{StaticResource TabPillButton}">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                      <TextBlock Text="📅" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0" />
+                      <TextBlock x:Name="TabLabel1" Text="Today" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Visibility="Collapsed" />
+                    </StackPanel>
+                  </Button>
+                  <Button Tag="2" Click="OnTabClick" Style="{StaticResource TabPillButton}">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                      <TextBlock Text="📊" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0" />
+                      <TextBlock x:Name="TabLabel2" Text="Stats" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Visibility="Collapsed" />
+                    </StackPanel>
+                  </Button>
+                  <Button Tag="3" Click="OnTabClick" Style="{StaticResource TabPillButton}">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                      <TextBlock Text="📋" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0" />
+                      <TextBlock x:Name="TabLabel3" Text="Clipboard" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Visibility="Collapsed" />
+                    </StackPanel>
+                  </Button>
+                  <Button Tag="4" Click="OnTabClick" Style="{StaticResource TabPillButton}">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                      <TextBlock Text="⊞" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0" />
+                      <TextBlock x:Name="TabLabel4" Text="Apps" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Visibility="Collapsed" />
+                    </StackPanel>
+                  </Button>
+                  <Button Tag="5" Click="OnTabClick" Style="{StaticResource TabPillButton}">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                      <TextBlock Text="🖼" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0" />
+                      <TextBlock x:Name="TabLabel5" Text="Wallpaper" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Visibility="Collapsed" />
+                    </StackPanel>
+                  </Button>
+                  <Button Tag="6" Click="OnTabClick" Style="{StaticResource TabPillButton}">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                      <TextBlock Text="⚡" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0" />
+                      <TextBlock x:Name="TabLabel6" Text="Power" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Visibility="Collapsed" />
+                    </StackPanel>
+                  </Button>
+                </UniformGrid>
+              </Grid>
             </Border>
 
             <!-- Tab Pages Content Stack -->
             <Grid x:Name="TabContent" Grid.Row="1" Margin="0,8,0,0">
+              <Grid.RenderTransform>
+                <TranslateTransform x:Name="TabContentSlideTransform" X="0" />
+              </Grid.RenderTransform>
               
               <!-- TAB 0: Controls -->
               <ScrollViewer x:Name="TabScroller" VerticalScrollBarVisibility="Auto">
@@ -246,69 +333,107 @@
               <ScrollViewer x:Name="PageToday" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
                 <StackPanel Margin="0,0,2,0">
                   <TextBlock Text="Today" Style="{StaticResource SectionTitle}" />
-                  <TextBlock x:Name="TodoCounter" Foreground="{StaticResource TextSecondaryBrush}"
+                  <TextBlock x:Name="TodoCounter" Foreground="{StaticResource Text2Brush}"
                              FontSize="11" Margin="0,3,0,6" />
-                  <Border Background="{StaticResource GlassCardBrush}" BorderBrush="{StaticResource GlassCardBorderBrush}"
-                          BorderThickness="1" CornerRadius="12" Padding="6,4">
-                    <ListBox x:Name="TodoList" Background="Transparent" BorderThickness="0"
-                             Foreground="{StaticResource TextPrimaryBrush}" MaxHeight="145">
-                      <ListBox.ItemTemplate>
-                        <DataTemplate>
-                          <DockPanel Margin="4,3" LastChildFill="True">
-                            <Border DockPanel.Dock="Right" Background="#1838BDF8" BorderBrush="#3338BDF8"
-                                    BorderThickness="1" CornerRadius="6" Padding="6,2" Margin="6,0,0,0"
-                                    VerticalAlignment="Center"
-                                    Visibility="{Binding DueTimeText, Converter={StaticResource StringToVisibilityConverter}}">
-                              <TextBlock Text="{Binding DueTimeText}" Foreground="{StaticResource SoulCyanBrush}"
-                                         FontSize="9.5" FontWeight="SemiBold" />
-                            </Border>
-                            <CheckBox Content="{Binding Title}" IsChecked="{Binding IsCompleted}"
-                                      Tag="{Binding Id}" Checked="OnTodoCheckChanged"
-                                      Unchecked="OnTodoCheckChanged" VerticalAlignment="Center" />
-                          </DockPanel>
-                        </DataTemplate>
-                      </ListBox.ItemTemplate>
-                    </ListBox>
+                  <Border Background="{StaticResource Surface1Brush}" BorderBrush="{StaticResource StrokeSubtleBrush}"
+                          BorderThickness="1" CornerRadius="{StaticResource CardRadius}" Padding="6,4">
+                    <Grid>
+                      <TextBlock x:Name="TodoEmptyState" Text="Nothing scheduled for today"
+                                 Foreground="{StaticResource Text3Brush}" FontSize="12"
+                                 HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,20"
+                                 Visibility="Collapsed" />
+                      <ListBox x:Name="TodoList" Background="Transparent" BorderThickness="0"
+                               Foreground="{StaticResource Text1Brush}" MaxHeight="145">
+                        <ListBox.ItemTemplate>
+                          <DataTemplate>
+                            <DockPanel Margin="4,4" LastChildFill="True">
+                              <Border DockPanel.Dock="Right" Background="{StaticResource AccentGlassBrush}" BorderBrush="{StaticResource AccentBorderBrush}"
+                                      BorderThickness="1" CornerRadius="6" Padding="6,2" Margin="6,0,0,0"
+                                      VerticalAlignment="Center"
+                                      Visibility="{Binding DueTimeText, Converter={StaticResource StringToVisibilityConverter}}">
+                                <TextBlock Text="{Binding DueTimeText}" Foreground="{StaticResource AccentBrush}"
+                                           FontSize="10" FontWeight="SemiBold" />
+                              </Border>
+                              <CheckBox Content="{Binding Title}" IsChecked="{Binding IsCompleted}"
+                                        Tag="{Binding Id}" Checked="OnTodoCheckChanged"
+                                        Unchecked="OnTodoCheckChanged" VerticalAlignment="Center" FontSize="13" />
+                            </DockPanel>
+                          </DataTemplate>
+                        </ListBox.ItemTemplate>
+                      </ListBox>
+                    </Grid>
                   </Border>
                   
                   <DockPanel Margin="0,8,0,0">
-                    <Button Content="Add" DockPanel.Dock="Right" Click="OnAddTodoClick" Margin="8,0,0,0" Padding="14,6" />
-                    <TextBox x:Name="TodoInput" ToolTip="Add a to-do item" />
+                    <Button Content="Add" DockPanel.Dock="Right" Click="OnAddTodoClick" Margin="8,0,0,0" Padding="14,0" Style="{StaticResource PrimaryButton}" />
+                    <TextBox x:Name="TodoInput" ToolTip="Add a to-do item" Height="32" />
                   </DockPanel>
 
-                  <TextBlock Text="Scheduled app launches" Foreground="{StaticResource TextPrimaryBrush}"
+                  <Border Background="{StaticResource Surface1Brush}" BorderBrush="{StaticResource StrokeSubtleBrush}"
+                          BorderThickness="1" CornerRadius="{StaticResource CardRadius}" Padding="12,10" Margin="0,14,0,2">
+                    <Grid>
+                      <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                      </Grid.RowDefinitions>
+                      <DockPanel>
+                        <TextBlock Text="Countdown timer" Foreground="{StaticResource Text1Brush}"
+                                   FontWeight="SemiBold" FontSize="12.5" />
+                        <TextBlock x:Name="TimerStatusText" DockPanel.Dock="Right" Text="No timer running"
+                                   Foreground="{StaticResource AccentBrush}" FontSize="11" FontWeight="SemiBold"
+                                   VerticalAlignment="Center" />
+                      </DockPanel>
+                      <DockPanel Grid.Row="1" Margin="0,8,0,0">
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                          <Button Content="Start" Click="OnTimerStartClick" Padding="14,4" Margin="6,0,0,0"
+                                  Style="{StaticResource PrimaryButton}" />
+                          <Button x:Name="TimerCancelButton" Content="Cancel" Click="OnTimerCancelClick"
+                                  Padding="12,4" Margin="6,0,0,0" IsEnabled="False"
+                                  Style="{StaticResource SecondaryButton}" />
+                        </StackPanel>
+                        <DockPanel LastChildFill="False">
+                          <TextBlock Text="Minutes" Foreground="{StaticResource Text2Brush}"
+                                     VerticalAlignment="Center" Margin="0,0,8,0" FontSize="11" />
+                          <TextBox x:Name="TimerMinutesInput" Text="5" Width="64" Height="28"
+                                   VerticalContentAlignment="Center" ToolTip="1 to 1440 minutes" />
+                        </DockPanel>
+                      </DockPanel>
+                    </Grid>
+                  </Border>
+
+                  <TextBlock Text="Scheduled app launches" Foreground="{StaticResource Text1Brush}"
                              FontWeight="SemiBold" FontSize="12.5" Margin="0,14,0,4" />
                   <DockPanel>
-                    <Button Content="Schedule" DockPanel.Dock="Right" Click="OnScheduleAppClick" Margin="8,0,0,0" Padding="12,6" />
-                    <TextBox x:Name="ScheduleAppInput" ToolTip="Start Menu app name" />
+                    <Button Content="Schedule" DockPanel.Dock="Right" Click="OnScheduleAppClick" Margin="8,0,0,0" Padding="12,0" Style="{StaticResource SecondaryButton}" />
+                    <TextBox x:Name="ScheduleAppInput" ToolTip="Start Menu app name" Height="32" />
                   </DockPanel>
                   <DockPanel Margin="0,6,0,0">
-                    <TextBlock Text="in minutes:" DockPanel.Dock="Left" Foreground="{StaticResource TextSecondaryBrush}"
+                    <TextBlock Text="in minutes:" DockPanel.Dock="Left" Foreground="{StaticResource Text2Brush}"
                                VerticalAlignment="Center" Margin="0,0,8,0" FontSize="11" />
-                    <TextBox x:Name="ScheduleMinutesInput" Text="1" Width="60" HorizontalAlignment="Left" />
+                    <TextBox x:Name="ScheduleMinutesInput" Text="1" Width="60" Height="28" HorizontalAlignment="Left" />
                   </DockPanel>
-                  <Border Background="{StaticResource GlassCardBrush}" BorderBrush="{StaticResource GlassCardBorderBrush}"
-                          BorderThickness="1" CornerRadius="12" Padding="4" Margin="0,6,0,0">
+                  <Border Background="{StaticResource Surface1Brush}" BorderBrush="{StaticResource StrokeSubtleBrush}"
+                          BorderThickness="1" CornerRadius="{StaticResource CardRadius}" Padding="4" Margin="0,6,0,0">
                     <ListBox x:Name="ScheduledList" MaxHeight="74" />
                   </Border>
-                  <TextBlock x:Name="ScheduledActionStatus" Foreground="{StaticResource TextSecondaryBrush}"
+                  <TextBlock x:Name="ScheduledActionStatus" Foreground="{StaticResource Text2Brush}"
                              TextWrapping="Wrap" FontSize="10" Margin="0,4,0,0" />
 
-                  <TextBlock Text="Daily routines" Foreground="{StaticResource TextPrimaryBrush}"
+                  <TextBlock Text="Daily routines" Foreground="{StaticResource Text1Brush}"
                               FontWeight="SemiBold" FontSize="12.5" Margin="0,12,0,4" />
                   <ItemsControl x:Name="RoutineList" MaxHeight="110">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate>
-                        <Border Background="{StaticResource GlassCardBrush}" BorderBrush="{StaticResource GlassCardBorderBrush}"
+                        <Border Background="{StaticResource Surface1Brush}" BorderBrush="{StaticResource StrokeSubtleBrush}"
                                 BorderThickness="1" CornerRadius="10" Padding="10,6" Margin="0,2">
                           <DockPanel>
                             <Button Content="Run now" Tag="{Binding Id}" Click="OnRoutineRunNowClick"
-                                    DockPanel.Dock="Right" Padding="8,3" Margin="4,0,0,0" />
+                                    DockPanel.Dock="Right" Padding="8,0" Height="28" Margin="4,0,0,0" Style="{StaticResource SecondaryButton}" />
                             <Button Content="{Binding IsEnabled, Converter={StaticResource RoutineToggleTextConverter}}"
                                     Tag="{Binding Id}" Click="OnRoutineToggleClick"
-                                    DockPanel.Dock="Right" Padding="8,3" Margin="4,0,0,0" />
+                                    DockPanel.Dock="Right" Padding="8,0" Height="28" Margin="4,0,0,0" Style="{StaticResource GhostButton}" />
                             <Button Content="×" Tag="{Binding Id}" Click="OnRoutineDeleteClick"
-                                    DockPanel.Dock="Right" Padding="6,3" />
+                                    DockPanel.Dock="Right" Padding="6,0" Height="28" Width="28" Style="{StaticResource GhostButton}" />
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                               <Border Background="{Binding IsEnabled, Converter={StaticResource RoutineStatusBgConverter}}"
                                       BorderBrush="{Binding IsEnabled, Converter={StaticResource RoutineStatusBorderConverter}}"
@@ -317,7 +442,7 @@
                                            Foreground="{Binding IsEnabled, Converter={StaticResource RoutineStatusFgConverter}}"
                                            FontSize="9" FontWeight="SemiBold" />
                               </Border>
-                              <TextBlock Text="{Binding Name}" Foreground="{StaticResource TextPrimaryBrush}"
+                              <TextBlock Text="{Binding Name}" Foreground="{StaticResource Text1Brush}"
                                          VerticalAlignment="Center" TextTrimming="CharacterEllipsis" FontSize="11.5" />
                             </StackPanel>
                           </DockPanel>
@@ -332,28 +457,28 @@
               <StackPanel x:Name="PageStats" Visibility="Collapsed">
                 <TextBlock Text="Your day" Style="{StaticResource SectionTitle}" />
                 <UniformGrid Columns="2" Rows="2" Margin="0,10,0,0">
-                  <Border Style="{StaticResource MetricCardCyan}">
+                  <Border Style="{StaticResource MetricCard}">
                     <StackPanel>
-                      <TextBlock Text="DICTATED WORDS" Style="{StaticResource Eyebrow}" Foreground="{StaticResource SoulCyanBrush}" />
                       <TextBlock x:Name="DictatedStat" Text="0" Style="{StaticResource MetricValue}" />
+                      <TextBlock Text="DICTATED WORDS" Style="{StaticResource Eyebrow}" Foreground="{StaticResource Text2Brush}" Margin="0,4,0,0" />
                     </StackPanel>
                   </Border>
-                  <Border Style="{StaticResource MetricCardViolet}">
+                  <Border Style="{StaticResource MetricCard}">
                     <StackPanel>
-                      <TextBlock Text="VOICE COMMANDS" Style="{StaticResource Eyebrow}" Foreground="{StaticResource SoulVioletBrush}" />
                       <TextBlock x:Name="VoiceStat" Text="0" Style="{StaticResource MetricValue}" />
+                      <TextBlock Text="VOICE COMMANDS" Style="{StaticResource Eyebrow}" Foreground="{StaticResource Text2Brush}" Margin="0,4,0,0" />
                     </StackPanel>
                   </Border>
-                  <Border Style="{StaticResource MetricCardAmber}">
+                  <Border Style="{StaticResource MetricCard}">
                     <StackPanel>
-                      <TextBlock Text="TOOLS EXECUTED" Style="{StaticResource Eyebrow}" Foreground="{StaticResource SoulAmberBrush}" />
                       <TextBlock x:Name="ToolsStat" Text="0" Style="{StaticResource MetricValue}" />
+                      <TextBlock Text="TOOLS EXECUTED" Style="{StaticResource Eyebrow}" Foreground="{StaticResource Text2Brush}" Margin="0,4,0,0" />
                     </StackPanel>
                   </Border>
-                  <Border Style="{StaticResource MetricCardEmerald}">
+                  <Border Style="{StaticResource MetricCard}">
                     <StackPanel>
-                      <TextBlock Text="TIME SAVED" Style="{StaticResource Eyebrow}" Foreground="{StaticResource SoulEmeraldBrush}" />
                       <TextBlock x:Name="TimeSavedStat" Text="0 min" Style="{StaticResource MetricValue}" />
+                      <TextBlock Text="TIME SAVED" Style="{StaticResource Eyebrow}" Foreground="{StaticResource Text2Brush}" Margin="0,4,0,0" />
                     </StackPanel>
                   </Border>
                 </UniformGrid>
@@ -362,33 +487,45 @@
               <!-- TAB 3: Clipboard -->
               <StackPanel x:Name="PageClipboard" Visibility="Collapsed">
                 <TextBlock Text="Clipboard" Style="{StaticResource SectionTitle}" />
-                <Border Background="{StaticResource GlassCardBrush}" BorderBrush="{StaticResource GlassCardBorderBrush}"
-                        BorderThickness="1" CornerRadius="12" Padding="12,10" Margin="0,8,0,4">
-                  <TextBlock x:Name="ClipboardPreview" Foreground="{StaticResource TextPrimaryBrush}"
+                <Border Background="{StaticResource Surface1Brush}" BorderBrush="{StaticResource StrokeSubtleBrush}"
+                        BorderThickness="1" CornerRadius="{StaticResource CardRadius}" Padding="12,10" Margin="0,8,0,4">
+                  <TextBlock x:Name="ClipboardPreview" Foreground="{StaticResource Text1Brush}"
                              TextWrapping="Wrap" FontSize="11.5" MaxHeight="60" TextTrimming="CharacterEllipsis" />
                 </Border>
-                <TextBlock Text="Select an item or click Paste to insert into the active window."
-                           Foreground="{StaticResource TextMutedBrush}" FontSize="10" Margin="2,0,0,6" />
+                <TextBlock Text="10 recent copies are kept. Select Paste to send to the active window."
+                           Foreground="{StaticResource Text3Brush}" FontSize="10" Margin="2,0,0,6" />
                 <ListBox x:Name="ClipboardHistoryList" MaxHeight="220" BorderThickness="0"
                          Background="Transparent">
                   <ListBox.ItemTemplate>
                     <DataTemplate>
-                      <Border Background="{StaticResource GlassCardBrush}" BorderBrush="{StaticResource GlassCardBorderBrush}"
+                      <Border Background="{StaticResource Surface1Brush}" BorderBrush="{StaticResource StrokeSubtleBrush}"
                               BorderThickness="1" CornerRadius="10" Padding="8,6" Margin="0,2">
                         <DockPanel LastChildFill="True">
                           <Border DockPanel.Dock="Left"
                                   Background="{Binding ContentType, Converter={StaticResource ClipTypeBgConverter}}"
                                   BorderBrush="{Binding ContentType, Converter={StaticResource ClipTypeBorderConverter}}"
-                                  BorderThickness="1" CornerRadius="4" Padding="5,2" Margin="0,0,8,0" VerticalAlignment="Center">
+                                  BorderThickness="1" CornerRadius="4" Padding="6,2" Margin="0,0,8,0" VerticalAlignment="Center">
                             <TextBlock Text="{Binding ContentType, Converter={StaticResource ClipTypeTextConverter}}"
                                        Foreground="{Binding ContentType, Converter={StaticResource ClipTypeFgConverter}}"
-                                       FontSize="9" FontWeight="SemiBold" />
+                                       FontSize="10" FontWeight="SemiBold" />
                           </Border>
-                          <Button DockPanel.Dock="Right" Content="Paste" Tag="{Binding Id}"
-                                  Click="OnClipboardItemClick" Padding="8,3" Margin="6,0,0,0"
-                                  VerticalAlignment="Center" FontSize="10" />
-                          <TextBlock Text="{Binding PreviewText}" Foreground="{StaticResource TextPrimaryBrush}"
-                                     FontSize="11" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Content="Paste" Tag="{Binding Id}"
+                                    Click="OnClipboardItemClick" Padding="10,0" Height="28" Margin="6,0,0,0"
+                                    Style="{StaticResource SecondaryButton}"
+                                    VerticalAlignment="Center" FontSize="11" />
+                            <Button Content="{Binding IsPinned, Converter={StaticResource ClipboardPinTextConverter}}"
+                                    Tag="{Binding Id}" Click="OnClipboardPinClick" Padding="8,0" Height="28" Margin="4,0,0,0"
+                                    Style="{StaticResource GhostButton}"
+                                    VerticalAlignment="Center" FontSize="11"
+                                    ToolTip="Keep this item beyond the 10 recent copies" />
+                            <Button Content="×" Tag="{Binding Id}" Click="OnClipboardDeleteClick"
+                                    Padding="6,0" Height="28" Width="28" Margin="4,0,0,0" VerticalAlignment="Center" FontSize="12"
+                                    Style="{StaticResource GhostButton}"
+                                    ToolTip="Delete clipboard item" />
+                          </StackPanel>
+                          <TextBlock Text="{Binding PreviewText}" Foreground="{StaticResource Text1Brush}"
+                                     FontSize="12" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                         </DockPanel>
                       </Border>
                     </DataTemplate>
@@ -399,25 +536,31 @@
               <!-- TAB 4: Apps -->
               <StackPanel x:Name="PageApps" Visibility="Collapsed">
                 <TextBlock Text="Apps" Style="{StaticResource SectionTitle}" />
-                <TextBox x:Name="AppSearch" Margin="0,8,0,0" ToolTip="Search apps, calculate (e.g. 45 * 1.18), or commands (> ping)"
+                <TextBox x:Name="AppSearch" Margin="0,8,0,0" Height="32"
+                         ToolTip="Search apps, calculate (e.g. 45 * 1.18), or commands (> ping)"
                          Style="{StaticResource AppSearchPillStyle}"
                          TextChanged="OnAppSearchChanged"
                          KeyDown="OnAppSearchKeyDown" />
-                <Border Background="{StaticResource GlassCardBrush}" BorderBrush="{StaticResource GlassCardBorderBrush}"
-                        BorderThickness="1" CornerRadius="12" Padding="4" Margin="0,6,0,0">
+                <Border Background="{StaticResource Surface1Brush}" BorderBrush="{StaticResource StrokeSubtleBrush}"
+                        BorderThickness="1" CornerRadius="{StaticResource CardRadius}" Padding="4" Margin="0,6,0,0">
                   <ListBox x:Name="AppResults" MaxHeight="160"
                            SelectionChanged="OnAppSelected">
                     <ListBox.ItemTemplate>
                       <DataTemplate>
-                        <DockPanel Margin="4,2">
-                          <Border Width="22" Height="22" CornerRadius="6" Background="#2038BDF8"
-                                  BorderBrush="#3338BDF8" BorderThickness="1" Margin="0,0,8,0"
+                        <DockPanel Margin="4,4">
+                          <Border Width="24" Height="24" CornerRadius="6" Background="{StaticResource AccentGlassBrush}"
+                                  BorderBrush="{StaticResource AccentBorderBrush}" BorderThickness="1" Margin="0,0,8,0"
                                   VerticalAlignment="Center">
-                            <TextBlock Text="⊞" Foreground="{StaticResource SoulCyanBrush}"
-                                       FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <TextBlock Text="⊞" Foreground="{StaticResource AccentBrush}"
+                                       FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" />
                           </Border>
-                          <TextBlock Text="{Binding Name}" Foreground="{StaticResource TextPrimaryBrush}"
-                                     FontSize="11.5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                          <Border DockPanel.Dock="Right" Background="{StaticResource Surface2Brush}"
+                                  BorderBrush="{StaticResource StrokeSubtleBrush}" BorderThickness="1"
+                                  CornerRadius="4" Padding="6,2" VerticalAlignment="Center">
+                            <TextBlock Text="↵ Enter" FontSize="10" Foreground="{StaticResource Text3Brush}" />
+                          </Border>
+                          <TextBlock Text="{Binding Name}" Foreground="{StaticResource Text1Brush}"
+                                     FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                         </DockPanel>
                       </DataTemplate>
                     </ListBox.ItemTemplate>
@@ -429,27 +572,36 @@
               <StackPanel x:Name="PageWallpaper" Visibility="Collapsed">
                 <TextBlock Text="Wallpaper" Style="{StaticResource SectionTitle}" />
                 <TextBlock Text="Choose a wallpaper image to apply it to your desktop."
-                           Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="0,6,0,6" />
-                <Border Background="{StaticResource GlassCardBrush}" BorderBrush="{StaticResource GlassCardBorderBrush}"
-                        BorderThickness="1" CornerRadius="12" Padding="4">
+                           Foreground="{StaticResource Text2Brush}" FontSize="11" Margin="0,6,0,6" />
+                <Border Background="{StaticResource Surface1Brush}" BorderBrush="{StaticResource StrokeSubtleBrush}"
+                        BorderThickness="1" CornerRadius="{StaticResource CardRadius}" Padding="4">
                   <ListBox x:Name="WallpaperResults" MaxHeight="155"
                            SelectionChanged="OnWallpaperSelected" />
                 </Border>
                 <Button Content="Open personalization settings" Tag="ms-settings:personalization-background"
-                        Click="OnSettingsClick" HorizontalAlignment="Left" Margin="0,8,0,0" />
+                        Click="OnSettingsClick" HorizontalAlignment="Left" Margin="0,8,0,0" Style="{StaticResource SecondaryButton}" />
               </StackPanel>
 
               <!-- TAB 6: Power -->
               <StackPanel x:Name="PagePower" Visibility="Collapsed">
                 <TextBlock Text="Power &amp; State" Style="{StaticResource SectionTitle}" />
-                <UniformGrid Columns="3" Rows="2" Margin="0,8,0,0">
-                  <Button Content="🔒 Lock screen&#10;Win + L workstation" Click="OnLockClick" Style="{StaticResource TileButton}" />
-                  <Button Content="💤 Sleep&#10;Low power standby" Click="OnSleepClick" Style="{StaticResource TileButton}" />
-                  <ToggleButton x:Name="QuietModeToggle" Content="🔕 Quiet mode&#10;Focus assistance" Margin="4" Padding="12,10"
-                                Checked="OnQuietModeChanged" Unchecked="OnQuietModeChanged" />
-                  <Button Content="🔄 Restart&#10;Reboot system" Click="OnRestartClick" Style="{StaticResource DangerTileButton}" />
-                  <Button Content="⏻ Shut down&#10;Power off machine" Click="OnShutdownClick" Style="{StaticResource DangerTileButton}" />
+                <UniformGrid Columns="2" Rows="2" Margin="0,8,0,0">
+                  <Button Content="🔒 Lock screen&#10;Win + L workstation" Click="OnLockClick" Style="{StaticResource TileButton}" Height="64" />
+                  <Button Content="💤 Sleep&#10;Low power standby" Click="OnSleepClick" Style="{StaticResource TileButton}" Height="64" />
+                  <Button Content="🔄 Restart&#10;Reboot system" Click="OnRestartClick" Style="{StaticResource DangerTileButton}" Height="64" />
+                  <Button Content="⏻ Shut down&#10;Power off machine" Click="OnShutdownClick" Style="{StaticResource DangerTileButton}" Height="64" />
                 </UniformGrid>
+                <Border Background="{StaticResource Surface1Brush}" BorderBrush="{StaticResource StrokeSubtleBrush}"
+                        BorderThickness="1" CornerRadius="{StaticResource CardRadius}" Padding="14,10" Margin="4,10,4,0">
+                  <DockPanel LastChildFill="True">
+                    <CheckBox x:Name="QuietModeToggle" DockPanel.Dock="Right" Style="{StaticResource QuietSwitch}"
+                              Checked="OnQuietModeChanged" Unchecked="OnQuietModeChanged" VerticalAlignment="Center" />
+                    <StackPanel VerticalAlignment="Center">
+                      <TextBlock Text="Quiet Mode" Foreground="{StaticResource Text1Brush}" FontWeight="SemiBold" FontSize="12.5" />
+                      <TextBlock Text="Focus assistance and silent background operations" Foreground="{StaticResource Text2Brush}" FontSize="10.5" Margin="0,2,0,0" />
+                    </StackPanel>
+                  </DockPanel>
+                </Border>
               </StackPanel>
 
             </Grid>

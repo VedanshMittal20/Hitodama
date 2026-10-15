@@ -12,7 +12,7 @@ public sealed class TestDirectoryScope : IDisposable
 
     public TestDirectoryScope()
     {
-        DirectoryPath = Path.Combine(Path.GetTempPath(), "HitodamaTests", Guid.NewGuid().ToString("N"));
+        DirectoryPath = Path.Combine(Path.GetTempPath(), "VoidTests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(DirectoryPath);
     }
 

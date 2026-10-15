@@ -64,7 +64,7 @@ public sealed class IpcBoundaryTests
     public void JsonRpc_DeeplyNestedParameters_ParsesAccurately()
     {
         // Arrange: 10 levels of nested objects
-        var nested = new { l1 = new { l2 = new { l3 = new { l4 = new { l5 = "DeepHitodamaValue" } } } } };
+        var nested = new { l1 = new { l2 = new { l3 = new { l4 = new { l5 = "DeepVoidValue" } } } } };
         var rpc = new
         {
             jsonrpc = "2.0",
@@ -84,6 +84,6 @@ public sealed class IpcBoundaryTests
             .GetProperty("l3")
             .GetProperty("l4")
             .GetProperty("l5")
-            .GetString().Should().Be("DeepHitodamaValue");
+            .GetString().Should().Be("DeepVoidValue");
     }
 }

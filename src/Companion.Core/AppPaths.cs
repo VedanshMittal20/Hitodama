@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading;
 
 namespace Companion.Core;
 
@@ -22,7 +23,8 @@ public static class AppPaths
 
     private static string DetermineRoot()
     {
-        string? env = Environment.GetEnvironmentVariable("HITODAMA_DATA_DIR");
+        string? env = Environment.GetEnvironmentVariable("VOID_DATA_DIR")
+            ?? Environment.GetEnvironmentVariable("HITODAMA_DATA_DIR");
         if (!string.IsNullOrWhiteSpace(env))
         {
             try
@@ -38,7 +40,7 @@ public static class AppPaths
         {
             try
             {
-                string target = Path.Combine(localApp, "HitodamaCompanion");
+                string target = GetBrandedRoot(localApp);
                 Directory.CreateDirectory(target);
                 string testFile = Path.Combine(target, ".perm_" + Guid.NewGuid().ToString("N"));
                 File.WriteAllText(testFile, "test");
@@ -51,9 +53,98 @@ public static class AppPaths
             }
         }
 
-        string fallback = Path.Combine(Path.GetTempPath(), "HitodamaCompanion");
+        string fallback = GetBrandedRoot(Path.GetTempPath());
         Directory.CreateDirectory(fallback);
         return fallback;
+    }
+
+    private static string GetBrandedRoot(string parentDirectory)
+    {
+        string target = Path.Combine(parentDirectory, "VoidCompanion");
+        string legacy = Path.Combine(parentDirectory, "HitodamaCompanion");
+        if (Directory.Exists(target) || !Directory.Exists(legacy))
+        {
+            return target;
+        }
+
+        // Keep using the original location while an older process may still be writing to it.
+        if (IsExistingShellInstance())
+        {
+            return legacy;
+        }
+
+        string staging = target + ".migration-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            using var migrationMutex = new Mutex(false, "Local\\Void.DataMigration");
+            if (!migrationMutex.WaitOne(TimeSpan.FromSeconds(2)))
+            {
+                return legacy;
+            }
+
+            try
+            {
+                if (Directory.Exists(target))
+                {
+                    return target;
+                }
+
+                CopyDirectory(legacy, staging);
+                Directory.Move(staging, target);
+                return target;
+            }
+            finally
+            {
+                migrationMutex.ReleaseMutex();
+            }
+        }
+        catch
+        {
+            try
+            {
+                if (Directory.Exists(staging))
+                {
+                    Directory.Delete(staging, recursive: true);
+                }
+            }
+            catch { }
+
+            // Falling back preserves access to existing settings if the copy cannot complete.
+            return Directory.Exists(target) ? target : legacy;
+        }
+    }
+
+    private static bool IsExistingShellInstance()
+    {
+        try
+        {
+            using var existing = Mutex.OpenExisting("Companion.SingleInstance");
+            return true;
+        }
+        catch (WaitHandleCannotBeOpenedException)
+        {
+            return false;
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    private static void CopyDirectory(string source, string destination)
+    {
+        Directory.CreateDirectory(destination);
+        foreach (string file in Directory.EnumerateFiles(source))
+        {
+            string target = Path.Combine(destination, Path.GetFileName(file));
+            File.Copy(file, target, overwrite: false);
+        }
+
+        foreach (string child in Directory.EnumerateDirectories(source))
+        {
+            string target = Path.Combine(destination, Path.GetFileName(child));
+            CopyDirectory(child, target);
+        }
     }
 
     public static string DatabasePath => Path.Combine(Root, "companion.db");

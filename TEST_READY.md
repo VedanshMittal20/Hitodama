@@ -1,4 +1,4 @@
-# Hitodama AI — Test Suite Readiness Report (`TEST_READY.md`)
+# Void AI — Test Suite Readiness Report (`TEST_READY.md`)
 
 **Date**: 2026-10-14  
 **Author**: `e2e_test_writer_1` (E2E Test Suite Architect)  

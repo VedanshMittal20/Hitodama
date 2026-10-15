@@ -5,6 +5,9 @@
     <WindowsSdkPackageVersion>10.0.19041.56</WindowsSdkPackageVersion>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationIcon>Resources\void.ico</ApplicationIcon>
+    <AssemblyTitle>Void</AssemblyTitle>
+    <Product>Void</Product>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -21,5 +24,9 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="H.NotifyIcon.Wpf" Version="2.3.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Resources\void-logo.png" />
+    <Resource Include="Resources\void.ico" />
   </ItemGroup>
 </Project>

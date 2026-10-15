@@ -10,6 +10,7 @@ namespace Companion.Core;
 public sealed class DatabaseService : IDatabaseService
 {
     private const int BusyTimeoutMilliseconds = 5000;
+    public const int DefaultClipboardLimit = 10;
     private readonly string _connectionString;
 
     public event Action? ScheduledActionsChanged;
@@ -807,11 +808,11 @@ public sealed class DatabaseService : IDatabaseService
         return new DailyStats(reader.GetString(0), reader.GetInt64(1), reader.GetInt64(2), reader.GetInt64(3));
     }
 
-    public IReadOnlyList<ClipEntry> GetClipboardEntries(int limit = 200)
+    public IReadOnlyList<ClipEntry> GetClipboardEntries(int limit = DefaultClipboardLimit)
     {
         if (limit is < 1 or > 200)
         {
-            throw new ArgumentOutOfRangeException(nameof(limit), "Limit must be between 1 and 200.");
+            throw new ArgumentOutOfRangeException(nameof(limit), "The unpinned clipboard limit must be between 1 and 200.");
         }
 
         using var connection = OpenConnection();
@@ -819,8 +820,13 @@ public sealed class DatabaseService : IDatabaseService
         command.CommandText = """
             SELECT id, content_type, content, preview_text, is_pinned, created_utc
             FROM clipboard_entries
+            WHERE is_pinned = 1 OR id IN (
+                SELECT id FROM clipboard_entries
+                WHERE is_pinned = 0
+                ORDER BY created_utc DESC, id DESC
+                LIMIT $limit
+            )
             ORDER BY is_pinned DESC, created_utc DESC, id DESC
-            LIMIT $limit;
             """;
         command.Parameters.AddWithValue("$limit", limit);
         var results = new List<ClipEntry>();
@@ -861,18 +867,18 @@ public sealed class DatabaseService : IDatabaseService
         return results;
     }
 
-    public long AddClipboardText(string text, int maxEntries = 200)
+    public long AddClipboardText(string text, int maxEntries = DefaultClipboardLimit)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(text);
         if (maxEntries is < 1 or > 200)
         {
-            throw new ArgumentOutOfRangeException(nameof(maxEntries), "Maximum entries must be between 1 and 200.");
+            throw new ArgumentOutOfRangeException(nameof(maxEntries), "Maximum unpinned entries must be between 1 and 200.");
         }
 
         return AddClipboardContent("text", Encoding.UTF8.GetBytes(text), maxEntries);
     }
 
-    public long AddClipboardImage(byte[] pngBytes, int maxEntries = 200)
+    public long AddClipboardImage(byte[] pngBytes, int maxEntries = DefaultClipboardLimit)
     {
         ArgumentNullException.ThrowIfNull(pngBytes);
         if (pngBytes.Length is 0 or > 16 * 1024 * 1024)
@@ -882,7 +888,7 @@ public sealed class DatabaseService : IDatabaseService
 
         if (maxEntries is < 1 or > 200)
         {
-            throw new ArgumentOutOfRangeException(nameof(maxEntries), "Maximum entries must be between 1 and 200.");
+            throw new ArgumentOutOfRangeException(nameof(maxEntries), "Maximum unpinned entries must be between 1 and 200.");
         }
 
         return AddClipboardContent("image/png", pngBytes.ToArray(), maxEntries);
@@ -919,18 +925,7 @@ public sealed class DatabaseService : IDatabaseService
             insert.Parameters.AddWithValue("$createdUtc", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
             insert.ExecuteNonQuery();
 
-            using var trim = connection.CreateCommand();
-            trim.Transaction = transaction;
-            trim.CommandText = """
-                DELETE FROM clipboard_entries
-                WHERE id NOT IN (
-                    SELECT id FROM clipboard_entries
-                    ORDER BY is_pinned DESC, created_utc DESC, id DESC
-                    LIMIT $limit
-                );
-                """;
-            trim.Parameters.AddWithValue("$limit", maxEntries);
-            trim.ExecuteNonQuery();
+            TrimUnpinnedClipboardEntries(connection, transaction, maxEntries);
             transaction.Commit();
             id = GetLastInsertRowId(connection);
         }
@@ -942,6 +937,34 @@ public sealed class DatabaseService : IDatabaseService
         return id;
     }
 
+    public bool SetClipboardEntryPinned(long id, bool isPinned)
+    {
+        using var connection = OpenConnection();
+        using var transaction = connection.BeginTransaction();
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            UPDATE clipboard_entries
+            SET is_pinned = $isPinned,
+                created_utc = CASE
+                    WHEN is_pinned = 1 AND $isPinned = 0 THEN $createdUtc
+                    ELSE created_utc
+                END
+            WHERE id = $id;
+            """;
+        command.Parameters.AddWithValue("$isPinned", isPinned ? 1 : 0);
+        command.Parameters.AddWithValue("$createdUtc", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+        command.Parameters.AddWithValue("$id", id);
+        bool changed = command.ExecuteNonQuery() > 0;
+        if (changed)
+        {
+            TrimUnpinnedClipboardEntries(connection, transaction, DefaultClipboardLimit);
+        }
+
+        transaction.Commit();
+        return changed;
+    }
+
     public bool DeleteClipboardEntry(long id)
     {
         using var connection = OpenConnection();
@@ -949,6 +972,58 @@ public sealed class DatabaseService : IDatabaseService
         command.CommandText = "DELETE FROM clipboard_entries WHERE id = $id;";
         command.Parameters.AddWithValue("$id", id);
         return command.ExecuteNonQuery() > 0;
+    }
+
+    public DateTimeOffset? GetCountdownTimerEndUtc()
+    {
+        using var connection = OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT end_utc FROM countdown_timer WHERE id = 1;";
+        object? value = command.ExecuteScalar();
+        return value is string text
+            ? DateTimeOffset.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind).ToUniversalTime()
+            : null;
+    }
+
+    public void SetCountdownTimerEndUtc(DateTimeOffset endUtc)
+    {
+        using var connection = OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO countdown_timer (id, end_utc) VALUES (1, $endUtc)
+            ON CONFLICT(id) DO UPDATE SET end_utc = excluded.end_utc;
+            """;
+        command.Parameters.AddWithValue("$endUtc", endUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
+        command.ExecuteNonQuery();
+    }
+
+    public void ClearCountdownTimer()
+    {
+        using var connection = OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = "DELETE FROM countdown_timer WHERE id = 1;";
+        command.ExecuteNonQuery();
+    }
+
+    private static void TrimUnpinnedClipboardEntries(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        int maxUnpinnedEntries)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            DELETE FROM clipboard_entries
+            WHERE is_pinned = 0
+              AND id NOT IN (
+                  SELECT id FROM clipboard_entries
+                  WHERE is_pinned = 0
+                  ORDER BY created_utc DESC, id DESC
+                  LIMIT $limit
+              );
+            """;
+        command.Parameters.AddWithValue("$limit", maxUnpinnedEntries);
+        command.ExecuteNonQuery();
     }
 
     // Audit Log
@@ -1078,6 +1153,11 @@ public sealed class DatabaseService : IDatabaseService
                 created_utc TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS countdown_timer (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                end_utc TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS audit_log (
                 id INTEGER PRIMARY KEY,
                 tool_name TEXT NOT NULL,
@@ -1089,6 +1169,11 @@ public sealed class DatabaseService : IDatabaseService
             UPDATE clipboard_entries SET preview_text = '' WHERE preview_text <> '';
             """;
         command.ExecuteNonQuery();
+
+        // One-time-in-effect migration: apply the 10-unpinned-item policy to existing databases.
+        using var transaction = connection.BeginTransaction();
+        TrimUnpinnedClipboardEntries(connection, transaction, DefaultClipboardLimit);
+        transaction.Commit();
     }
 
     private static long GetLastInsertRowId(SqliteConnection connection)

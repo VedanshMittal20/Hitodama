@@ -274,7 +274,7 @@ public sealed class Milestone1AdversarialTests : IDisposable
     public void FTS5_AdversarialQueries_NeverThrowOrCorrupt(string query)
     {
         var db = new DatabaseService(_scope.CreateFilePath("fts_adversarial.db"));
-        db.AddMemory("Hitodama desktop companion with C# 12 and .NET 8 WPF", "core,shell");
+        db.AddMemory("Void desktop companion with C# 12 and .NET 8 WPF", "core,shell");
         db.AddMemory("Gemini Live real-time audio pipeline with 24kHz playback", "audio,gemini");
         db.AddMemory("東京都 渋谷区 and café naïve façade Übergrößen with emojis 🔥🚀", "unicode,intl");
 

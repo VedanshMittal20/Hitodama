@@ -40,7 +40,7 @@ public sealed class SecretStoreTests : IDisposable
     public void SaveApiKey_And_LoadApiKey_Roundtrip_PreservesPlaintext()
     {
         // Arrange
-        const string testKey = "AIzaSyTest_Hitodama_SecretKey_987654321";
+        const string testKey = "AIzaSyTest_Void_SecretKey_987654321";
 
         // Act
         SecretStore.SaveApiKey(testKey);
@@ -109,7 +109,7 @@ public sealed class SecretStoreTests : IDisposable
     public void DPAPI_ProtectionScope_DirectEncryptDecrypt_Succeeds()
     {
         // Arrange
-        byte[] secret = Encoding.UTF8.GetBytes("SuperSecretToken_For_Hitodama");
+        byte[] secret = Encoding.UTF8.GetBytes("SuperSecretToken_For_Void");
 
         // Act
         byte[] encrypted = ProtectedData.Protect(secret, null, DataProtectionScope.CurrentUser);
@@ -118,6 +118,6 @@ public sealed class SecretStoreTests : IDisposable
         // Assert
         encrypted.Should().NotBeNullOrEmpty();
         encrypted.Should().NotEqual(secret);
-        Encoding.UTF8.GetString(decrypted).Should().Be("SuperSecretToken_For_Hitodama");
+        Encoding.UTF8.GetString(decrypted).Should().Be("SuperSecretToken_For_Void");
     }
 }

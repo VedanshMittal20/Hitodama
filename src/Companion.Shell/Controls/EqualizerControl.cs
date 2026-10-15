@@ -29,6 +29,47 @@ public sealed class EqualizerControl : FrameworkElement
     private bool _isAnimating;
     private bool _isPlaying;
     private double _audioLevel;
+    private TimeSpan _lastRenderedAt;
+    private Brush? _albumBrush;
+
+    public static readonly DependencyProperty HasAlbumPaletteProperty =
+        DependencyProperty.Register(
+            nameof(HasAlbumPalette),
+            typeof(bool),
+            typeof(EqualizerControl),
+            new PropertyMetadata(false, OnPaletteChanged));
+
+    public bool HasAlbumPalette
+    {
+        get => (bool)GetValue(HasAlbumPaletteProperty);
+        set => SetValue(HasAlbumPaletteProperty, value);
+    }
+
+    public static readonly DependencyProperty AlbumPrimaryColorProperty =
+        DependencyProperty.Register(
+            nameof(AlbumPrimaryColor),
+            typeof(Color),
+            typeof(EqualizerControl),
+            new PropertyMetadata(Color.FromRgb(56, 189, 248), OnPaletteChanged));
+
+    public Color AlbumPrimaryColor
+    {
+        get => (Color)GetValue(AlbumPrimaryColorProperty);
+        set => SetValue(AlbumPrimaryColorProperty, value);
+    }
+
+    public static readonly DependencyProperty AlbumSecondaryColorProperty =
+        DependencyProperty.Register(
+            nameof(AlbumSecondaryColor),
+            typeof(Color),
+            typeof(EqualizerControl),
+            new PropertyMetadata(Color.FromRgb(129, 140, 248), OnPaletteChanged));
+
+    public Color AlbumSecondaryColor
+    {
+        get => (Color)GetValue(AlbumSecondaryColorProperty);
+        set => SetValue(AlbumSecondaryColorProperty, value);
+    }
 
     public static readonly DependencyProperty IsPlayingProperty =
         DependencyProperty.Register(
@@ -62,6 +103,29 @@ public sealed class EqualizerControl : FrameworkElement
         Height = 18;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+        IsVisibleChanged += OnVisibilityChanged;
+    }
+
+    private static void OnPaletteChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is EqualizerControl control)
+        {
+            control.UpdateAlbumBrush();
+            control.InvalidateVisual();
+        }
+    }
+
+    private void UpdateAlbumBrush()
+    {
+        if (!HasAlbumPalette)
+        {
+            _albumBrush = null;
+            return;
+        }
+
+        var brush = new LinearGradientBrush(AlbumPrimaryColor, AlbumSecondaryColor, 90);
+        brush.Freeze();
+        _albumBrush = brush;
     }
 
     private static void OnIsPlayingChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -83,9 +147,21 @@ public sealed class EqualizerControl : FrameworkElement
         StopAnimation();
     }
 
+    private void OnVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (IsVisible)
+        {
+            EnsureAnimation();
+        }
+        else
+        {
+            StopAnimation();
+        }
+    }
+
     private void EnsureAnimation()
     {
-        if (!IsLoaded)
+        if (!IsLoaded || !IsVisible)
         {
             return;
         }
@@ -97,6 +173,7 @@ public sealed class EqualizerControl : FrameworkElement
                 _isAnimating = true;
                 _clock.Restart();
                 _lastTime = TimeSpan.Zero;
+                _lastRenderedAt = TimeSpan.FromSeconds(-1);
                 CompositionTarget.Rendering += OnRendering;
             }
         }
@@ -115,8 +192,20 @@ public sealed class EqualizerControl : FrameworkElement
     private void OnRendering(object? sender, EventArgs e)
     {
         var now = _clock.Elapsed;
+        if (!IsVisible)
+        {
+            StopAnimation();
+            return;
+        }
+
+        if ((now - _lastRenderedAt).TotalMilliseconds < 33)
+        {
+            return;
+        }
+
         double dt = Math.Clamp((now - _lastTime).TotalSeconds, 0.001, 0.050);
         _lastTime = now;
+        _lastRenderedAt = now;
         double seconds = now.TotalSeconds;
 
         double maxHeight = Math.Max(12.0, ActualHeight > 0 ? ActualHeight : 18.0);
@@ -175,6 +264,8 @@ public sealed class EqualizerControl : FrameworkElement
         double totalBarsWidth = (4 * barWidth) + (3 * barSpacing);
         double startX = (w - totalBarsWidth) / 2.0;
 
+        Brush brush = _albumBrush ?? (System.Windows.Application.Current?.TryFindResource("AccentBrush") as Brush) ?? BarBrush;
+
         for (int i = 0; i < 4; i++)
         {
             double barHeight = Math.Clamp(_barSprings[i].Current, 2.0, h);
@@ -182,7 +273,7 @@ public sealed class EqualizerControl : FrameworkElement
             double y = h - barHeight;
 
             var rect = new Rect(x, y, barWidth, barHeight);
-            dc.DrawRoundedRectangle(BarBrush, null, rect, radius, radius);
+            dc.DrawRoundedRectangle(brush, null, rect, radius, radius);
         }
     }
 }

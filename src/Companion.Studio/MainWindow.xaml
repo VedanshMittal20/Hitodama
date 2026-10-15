@@ -1,370 +1,568 @@
 <Window x:Class="Companion.Studio.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Hitodama Studio · Soul Architect" Height="780" Width="980"
-        MinHeight="660" MinWidth="840" WindowStartupLocation="CenterScreen"
-        Background="{StaticResource IslandBaseBrush}" Foreground="{StaticResource TextPrimaryBrush}"
-        FontFamily="Segoe UI Variable Text, Segoe UI, sans-serif"
+        xmlns:controls="clr-namespace:Companion.Shell.Controls"
+        Title="Void Studio · Soul Architect" Icon="/Resources/void-logo.png" Height="780" Width="1020"
+        MinHeight="660" MinWidth="880" WindowStartupLocation="CenterScreen"
+        Background="{StaticResource Surface0Brush}" Foreground="{StaticResource Text1Brush}"
+        FontFamily="{StaticResource AppFontFamily}"
         TextOptions.TextFormattingMode="Display"
         TextOptions.TextRenderingMode="ClearType">
-  <Grid Margin="24">
-    <Grid.RowDefinitions>
-      <RowDefinition Height="Auto" />
-      <RowDefinition Height="*" />
-      <RowDefinition Height="Auto" />
-    </Grid.RowDefinitions>
 
-    <!-- Top Header Bar with Engine Status Pill -->
-    <DockPanel Margin="0,0,0,20">
-      <!-- Right Status Badge -->
-      <Border DockPanel.Dock="Right" VerticalAlignment="Center"
-              Background="{StaticResource GlassCardBrush}"
-              BorderBrush="{StaticResource GlassCardBorderBrush}"
-              BorderThickness="1" CornerRadius="20" Padding="12,6">
-        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-          <Border Width="6" Height="6" CornerRadius="3" Background="{StaticResource SoulEmeraldBrush}"
-                  VerticalAlignment="Center" Margin="0,0,8,0">
-          </Border>
-          <TextBlock Text="ENGINE V1.0 · LOCAL RUNTIME" FontSize="11" FontWeight="SemiBold"
-                     Foreground="{StaticResource TextSecondaryBrush}" />
-        </StackPanel>
-      </Border>
-
-      <!-- Left Title & Subtitle -->
-      <StackPanel VerticalAlignment="Center">
-        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-          <Border Background="{StaticResource AccentGlassBrush}"
-                  BorderBrush="{StaticResource AccentBorderBrush}"
-                  BorderThickness="1" CornerRadius="6" Padding="6,2" Margin="0,0,10,0">
-            <TextBlock Text="STUDIO" FontSize="10" FontWeight="Bold"
-                       Foreground="{StaticResource AccentBrush}" />
-          </Border>
-          <TextBlock Text="Shape Your Hitodama" FontSize="22" FontWeight="SemiBold"
-                     Foreground="{StaticResource TextPrimaryBrush}" />
-        </StackPanel>
-        <TextBlock Text="Customize neural persona, Windows voice synthesis, encrypted credentials, and local episodic memory."
-                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="12.5" Margin="0,5,0,0" />
-      </StackPanel>
-    </DockPanel>
-
-    <!-- Main Tab Controller -->
-    <TabControl Grid.Row="1">
-
-      <!-- ========================================== -->
-      <!-- TAB 1: SOUL LOADOUT                        -->
-      <!-- ========================================== -->
-      <TabItem Header="01   Soul">
-        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,8,0">
-          <StackPanel Margin="0,4,0,12">
-
-            <!-- Slot 1: Soul Identity -->
-            <Border Style="{StaticResource GlassCard}" Margin="0,0,0,14">
-              <StackPanel>
-                <DockPanel Margin="0,0,0,12">
-                  <TextBlock Text="SLOT 1 · SOUL IDENTITY" Style="{StaticResource CardEyebrow}" DockPanel.Dock="Left" />
-                  <TextBlock Text="Visual appearance &amp; callsign" Foreground="{StaticResource TextMutedBrush}"
-                             FontSize="11" HorizontalAlignment="Right" />
-                </DockPanel>
-                <Grid>
-                  <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="16" />
-                    <ColumnDefinition Width="280" />
-                  </Grid.ColumnDefinitions>
-
-                  <!-- Visual Style Dropdown -->
-                  <StackPanel Grid.Column="0">
-                    <TextBlock Text="VISUAL AURA STYLE" FontSize="11" FontWeight="SemiBold"
-                               Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6" />
-                    <ComboBox x:Name="SoulStyleInput" />
-                  </StackPanel>
-
-                  <!-- Soul Name Input -->
-                  <StackPanel Grid.Column="2">
-                    <TextBlock Text="COMPANION NAME" FontSize="11" FontWeight="SemiBold"
-                               Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6" />
-                    <TextBox x:Name="SoulNameInput" />
-                  </StackPanel>
-                </Grid>
-              </StackPanel>
+  <Window.Resources>
+    <!-- Left Rail Button Style -->
+    <Style x:Key="RailButton" TargetType="Button">
+      <Setter Property="Height" Value="38" />
+      <Setter Property="Margin" Value="0,2" />
+      <Setter Property="Padding" Value="12,0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource Text2Brush}" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="FontFamily" Value="{StaticResource AppFontFamily}" />
+      <Setter Property="FontSize" Value="{StaticResource FontSizeBodySmall}" />
+      <Setter Property="FontWeight" Value="Medium" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+      <Setter Property="FocusVisualStyle" Value="{StaticResource QuietFocusVisual}" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="border" Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="8" Padding="{TemplateBinding Padding}"
+                    SnapsToDevicePixels="True">
+              <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center" />
             </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="border" Property="Background" Value="{StaticResource Surface2Brush}" />
+                <Setter Property="Foreground" Value="{StaticResource Text1Brush}" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
 
-            <!-- Slot 2: Personality & Prompt -->
-            <Border Style="{StaticResource GlassCard}" Margin="0,0,0,14">
-              <StackPanel>
-                <DockPanel Margin="0,0,0,12">
-                  <TextBlock Text="SLOT 2 · PERSONALITY &amp; INSTRUCTIONS" Style="{StaticResource CardEyebrow}" DockPanel.Dock="Left" />
-                  <TextBlock Text="Directives &amp; tone archetype" Foreground="{StaticResource TextMutedBrush}"
-                             FontSize="11" HorizontalAlignment="Right" />
-                </DockPanel>
-
-                <TextBlock Text="ARCHETYPE PRESET" FontSize="11" FontWeight="SemiBold"
-                           Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6" />
-                <ComboBox x:Name="PersonalityInput" SelectionChanged="OnPersonalityChanged" Margin="0,0,0,12" />
-
-                <DockPanel Margin="0,0,0,6">
-                  <TextBlock Text="SYSTEM INSTRUCTIONS (PROMPT)" FontSize="11" FontWeight="SemiBold"
-                             Foreground="{StaticResource TextSecondaryBrush}" DockPanel.Dock="Left" />
-                  <TextBlock Text="Defines tone, brevity, and execution boundaries"
-                             Foreground="{StaticResource TextMutedBrush}" FontSize="11" HorizontalAlignment="Right" />
-                </DockPanel>
-                <TextBox x:Name="PersonalityPromptInput" MinHeight="110" MaxHeight="220" AcceptsReturn="True"
-                         TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" />
-              </StackPanel>
+    <!-- Look Chip Button Style -->
+    <Style x:Key="LookChipButton" TargetType="Button">
+      <Setter Property="Height" Value="32" />
+      <Setter Property="Margin" Value="0,0,8,0" />
+      <Setter Property="Padding" Value="12,0" />
+      <Setter Property="Background" Value="{StaticResource Surface2Brush}" />
+      <Setter Property="Foreground" Value="{StaticResource Text1Brush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource StrokeSubtleBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="FontFamily" Value="{StaticResource AppFontFamily}" />
+      <Setter Property="FontSize" Value="{StaticResource FontSizeCaption}" />
+      <Setter Property="FontWeight" Value="Medium" />
+      <Setter Property="FocusVisualStyle" Value="{StaticResource QuietFocusVisual}" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="border" Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="8" Padding="{TemplateBinding Padding}"
+                    SnapsToDevicePixels="True">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
             </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource StrokeStrongBrush}" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
 
-            <!-- Slot 3: Voice & Model -->
-            <Border Style="{StaticResource GlassCard}" Margin="0,0,0,14">
-              <StackPanel>
-                <DockPanel Margin="0,0,0,12">
-                  <TextBlock Text="SLOT 3 · VOICE &amp; INFERENCE MODEL" Style="{StaticResource CardEyebrow}" DockPanel.Dock="Left" />
-                  <TextBlock Text="Acoustics &amp; Gemini Live endpoint" Foreground="{StaticResource TextMutedBrush}"
-                             FontSize="11" HorizontalAlignment="Right" />
-                </DockPanel>
+  <Grid>
+    <Grid.ColumnDefinitions>
+      <!-- Left Rail Column -->
+      <ColumnDefinition Width="220" />
+      <!-- Main Content Stage Column -->
+      <ColumnDefinition Width="*" />
+    </Grid.ColumnDefinitions>
 
-                <Grid>
-                  <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="16" />
-                    <ColumnDefinition Width="*" />
-                  </Grid.ColumnDefinitions>
-
-                  <!-- Voice Preset -->
-                  <StackPanel Grid.Column="0">
-                    <TextBlock Text="VOICE PRESET" FontSize="11" FontWeight="SemiBold"
-                               Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6" />
-                    <ComboBox x:Name="VoiceInput" />
-                  </StackPanel>
-
-                  <!-- Model ID -->
-                  <StackPanel Grid.Column="2">
-                    <TextBlock Text="GEMINI LIVE MODEL ID" FontSize="11" FontWeight="SemiBold"
-                               Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6" />
-                    <TextBox x:Name="ModelInput" />
-                  </StackPanel>
-                </Grid>
-              </StackPanel>
+    <!-- ======================================================== -->
+    <!-- LEFT RAIL NAVIGATION                                      -->
+    <!-- ======================================================== -->
+    <Border Grid.Column="0" Background="{StaticResource Surface1Brush}"
+            BorderBrush="{StaticResource StrokeSubtleBrush}" BorderThickness="0,0,1,0"
+            Padding="14,18">
+      <DockPanel>
+        <!-- Top App Branding -->
+        <StackPanel DockPanel.Dock="Top" Margin="4,0,0,24">
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <Image Source="/Resources/void-logo.png" Width="32" Height="32"
+                   VerticalAlignment="Center" Margin="0,0,8,0" Stretch="Uniform" />
+            <TextBlock Text="VOID" FontSize="13" FontWeight="Bold"
+                       Foreground="{StaticResource Text1Brush}" VerticalAlignment="Center" />
+            <Border Background="{StaticResource Surface2Brush}" BorderBrush="{StaticResource StrokeSubtleBrush}"
+                    BorderThickness="1" CornerRadius="4" Padding="5,1" Margin="8,0,0,0" VerticalAlignment="Center">
+              <TextBlock Text="STUDIO" FontSize="9" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" />
             </Border>
-
-            <!-- Slot 4: Abilities -->
-            <Border Style="{StaticResource GlassCard}">
-              <StackPanel>
-                <DockPanel Margin="0,0,0,14">
-                  <TextBlock Text="SLOT 4 · ABILITY PACKS" Style="{StaticResource CardEyebrow}" DockPanel.Dock="Left" />
-                  <TextBlock Text="Autonomous execution modules" Foreground="{StaticResource TextMutedBrush}"
-                             FontSize="11" HorizontalAlignment="Right" />
-                </DockPanel>
-
-                <UniformGrid Columns="2">
-                  <Border Style="{StaticResource SubCard}">
-                    <CheckBox x:Name="SystemAbility">
-                      <StackPanel Margin="2,0,0,0">
-                        <TextBlock Text="System Controls" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12.5" />
-                        <TextBlock Text="Hardware volume, brightness, display &amp; power controls"
-                                   Foreground="{StaticResource TextMutedBrush}" FontSize="11" Margin="0,2,0,0" />
-                      </StackPanel>
-                    </CheckBox>
-                  </Border>
-
-                  <Border Style="{StaticResource SubCard}">
-                    <CheckBox x:Name="DesktopAbility">
-                      <StackPanel Margin="2,0,0,0">
-                        <TextBlock Text="Desktop UIA" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12.5" />
-                        <TextBlock Text="Window focus, UI Automation clicks &amp; keyboard automation"
-                                   Foreground="{StaticResource TextMutedBrush}" FontSize="11" Margin="0,2,0,0" />
-                      </StackPanel>
-                    </CheckBox>
-                  </Border>
-
-                  <Border Style="{StaticResource SubCard}">
-                    <CheckBox x:Name="PlannerAbility">
-                      <StackPanel Margin="2,0,0,0">
-                        <TextBlock Text="Planner &amp; Routines" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12.5" />
-                        <TextBlock Text="Scheduled routines, agenda tracking &amp; proactive alarms"
-                                   Foreground="{StaticResource TextMutedBrush}" FontSize="11" Margin="0,2,0,0" />
-                      </StackPanel>
-                    </CheckBox>
-                  </Border>
-
-                  <Border Style="{StaticResource SubCard}">
-                    <CheckBox x:Name="MediaAbility">
-                      <StackPanel Margin="2,0,0,0">
-                        <TextBlock Text="Media Island" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12.5" />
-                        <TextBlock Text="Windows GSMTC media control, track metadata &amp; playback"
-                                   Foreground="{StaticResource TextMutedBrush}" FontSize="11" Margin="0,2,0,0" />
-                      </StackPanel>
-                    </CheckBox>
-                  </Border>
-
-                  <Border Style="{StaticResource SubCard}">
-                    <CheckBox x:Name="ResearchAbility">
-                      <StackPanel Margin="2,0,0,0">
-                        <TextBlock Text="Web Research" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12.5" />
-                        <TextBlock Text="Search, live information retrieval &amp; browser lookups"
-                                   Foreground="{StaticResource TextMutedBrush}" FontSize="11" Margin="0,2,0,0" />
-                      </StackPanel>
-                    </CheckBox>
-                  </Border>
-
-                  <Border Style="{StaticResource SubCard}">
-                    <CheckBox x:Name="MemoryAbility">
-                      <StackPanel Margin="2,0,0,0">
-                        <TextBlock Text="Persistent Memory" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12.5" />
-                        <TextBlock Text="Episodic fact storage across sessions in SQLite database"
-                                   Foreground="{StaticResource TextMutedBrush}" FontSize="11" Margin="0,2,0,0" />
-                      </StackPanel>
-                    </CheckBox>
-                  </Border>
-                </UniformGrid>
-              </StackPanel>
-            </Border>
-
           </StackPanel>
-        </ScrollViewer>
-      </TabItem>
+          <TextBlock Text="SOUL ARCHITECT · LOCAL RUNTIME" FontSize="9.5" FontWeight="SemiBold"
+                     Foreground="{StaticResource Text3Brush}" Margin="16,4,0,0" />
+        </StackPanel>
 
-      <!-- ========================================== -->
-      <!-- TAB 2: CONNECT & TALK                      -->
-      <!-- ========================================== -->
-      <TabItem Header="02   Connect &amp; talk">
-        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,8,0">
-          <StackPanel Margin="0,4,0,12">
+        <!-- Bottom Actions & Engine Status -->
+        <StackPanel DockPanel.Dock="Bottom" Margin="0,16,0,0">
+          <Border Background="{StaticResource Surface2Brush}" BorderBrush="{StaticResource StrokeSubtleBrush}"
+                  BorderThickness="1" CornerRadius="8" Padding="10,8" Margin="0,0,0,12">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+              <Border Width="6" Height="6" CornerRadius="3" Background="{StaticResource SuccessBrush}"
+                      VerticalAlignment="Center" Margin="0,0,8,0" />
+              <TextBlock Text="RUNTIME ONLINE" FontSize="10" FontWeight="SemiBold"
+                         Foreground="{StaticResource Text2Brush}" />
+            </StackPanel>
+          </Border>
 
-            <!-- Step 1: Create Key -->
-            <Border Style="{StaticResource GlassCard}" Margin="0,0,0,14">
-              <StackPanel>
-                <DockPanel Margin="0,0,0,10">
-                  <TextBlock Text="01 · GENERATE API KEY" Style="{StaticResource CardEyebrow}" DockPanel.Dock="Left" />
-                  <TextBlock Text="Google AI Studio" Foreground="{StaticResource TextMutedBrush}"
-                             FontSize="11" HorizontalAlignment="Right" />
-                </DockPanel>
-                <TextBlock Text="Create a Gemini API key with access to Gemini Live multimodal audio."
-                           Foreground="{StaticResource TextSecondaryBrush}" FontSize="12.5" Margin="0,0,0,12" />
-                <Button Content="Open Google AI Studio ↗" HorizontalAlignment="Left"
-                        Click="OnOpenApiKeyPageClick" Padding="14,8" />
-              </StackPanel>
-            </Border>
+          <Button Content="Save Loadout" Click="OnSaveLoadoutClick"
+                  Style="{StaticResource PrimaryButton}" Height="34" Width="192" HorizontalAlignment="Center" />
 
-            <!-- Step 2: Paste and Encrypt -->
-            <Border Style="{StaticResource GlassCard}" Margin="0,0,0,14">
-              <StackPanel>
-                <DockPanel Margin="0,0,0,10">
-                  <TextBlock Text="02 · ENCRYPT &amp; STORE LOCALLY" Style="{StaticResource CardEyebrow}" DockPanel.Dock="Left" />
-                  <TextBlock Text="Windows DPAPI Protected" Foreground="{StaticResource TextMutedBrush}"
-                             FontSize="11" HorizontalAlignment="Right" />
-                </DockPanel>
-                <TextBlock Text="Your API key is encrypted exclusively for your Windows user profile and stored on this PC. It is never logged or transmitted anywhere except direct to Google."
-                           Foreground="{StaticResource TextSecondaryBrush}" FontSize="12.5" TextWrapping="Wrap" Margin="0,0,0,12" />
+          <TextBlock x:Name="SaveStatus" Foreground="{StaticResource Text2Brush}"
+                     FontSize="10.5" TextWrapping="Wrap" Margin="0,8,0,0" HorizontalAlignment="Center" TextAlignment="Center" />
+        </StackPanel>
 
-                <DockPanel>
-                  <Button Content="Save encrypted key" DockPanel.Dock="Right" Click="OnSaveApiKeyClick"
-                          Style="{StaticResource PrimaryButton}" Margin="10,0,0,0" />
-                  <PasswordBox x:Name="ApiKeyInput" />
-                </DockPanel>
+        <!-- Rail Navigation Buttons -->
+        <StackPanel VerticalAlignment="Top">
+          <Button x:Name="RailSoul" Tag="0" Click="OnRailClick" Style="{StaticResource RailButton}">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+              <TextBlock Text="✦" FontSize="13" Foreground="{StaticResource AccentBrush}" Margin="0,0,10,0" VerticalAlignment="Center" />
+              <TextBlock Text="01   Soul &amp; Look" FontSize="12.5" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
 
-                <!-- Status pill -->
-                <Border Margin="0,12,0,0" Background="#12FFFFFF" BorderBrush="#1AFFFFFF" BorderThickness="1"
-                        CornerRadius="8" Padding="12,8" HorizontalAlignment="Left">
+          <Button x:Name="RailVoice" Tag="1" Click="OnRailClick" Style="{StaticResource RailButton}">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+              <TextBlock Text="🎙" FontSize="12" Foreground="{StaticResource Text2Brush}" Margin="0,0,10,0" VerticalAlignment="Center" />
+              <TextBlock Text="02   Voice &amp; API Key" FontSize="12.5" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+
+          <Button x:Name="RailAbilities" Tag="2" Click="OnRailClick" Style="{StaticResource RailButton}">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+              <TextBlock Text="⚙" FontSize="12" Foreground="{StaticResource Text2Brush}" Margin="0,0,10,0" VerticalAlignment="Center" />
+              <TextBlock Text="03   Abilities" FontSize="12.5" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+
+          <Button x:Name="RailMemories" Tag="3" Click="OnRailClick" Style="{StaticResource RailButton}">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+              <TextBlock Text="🗄" FontSize="12" Foreground="{StaticResource Text2Brush}" Margin="0,0,10,0" VerticalAlignment="Center" />
+              <TextBlock Text="04   Memories &amp; Log" FontSize="12.5" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+
+          <Button x:Name="RailAbout" Tag="4" Click="OnRailClick" Style="{StaticResource RailButton}">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+              <TextBlock Text="ℹ" FontSize="12" Foreground="{StaticResource Text2Brush}" Margin="0,0,10,0" VerticalAlignment="Center" />
+              <TextBlock Text="05   About Void" FontSize="12.5" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <!-- ======================================================== -->
+    <!-- MAIN CONTENT STAGE                                       -->
+    <!-- ======================================================== -->
+    <Grid Grid.Column="1" Margin="24,20,24,20">
+
+      <!-- ====================================================== -->
+      <!-- SECTION 0: SOUL & LOOK                                 -->
+      <!-- ====================================================== -->
+      <ScrollViewer x:Name="SectionSoul" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,8,0">
+        <StackPanel Margin="0,0,0,16">
+          <!-- Section Title -->
+          <DockPanel Margin="0,0,0,16">
+            <StackPanel>
+              <TextBlock Text="Soul Identity &amp; Aura" FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource Text1Brush}" />
+              <TextBlock Text="Live visual appearance, personality archetype, and companion callsign."
+                         FontSize="12" Foreground="{StaticResource Text2Brush}" Margin="0,3,0,0" />
+            </StackPanel>
+          </DockPanel>
+
+          <!-- Live Soul Preview Stage (120px tall card) -->
+          <Border Style="{StaticResource GlassCard}" Margin="0,0,0,14" Padding="16,14">
+            <StackPanel>
+              <DockPanel Margin="0,0,0,10">
+                <TextBlock Text="LIVE SOUL PREVIEW" Style="{StaticResource CardEyebrow}" DockPanel.Dock="Left" />
+                <TextBlock Text="Zero-render Idle state · 120Hz Spring reactive" Foreground="{StaticResource Text3Brush}"
+                           FontSize="11" HorizontalAlignment="Right" />
+              </DockPanel>
+
+              <!-- Centered 120px Stage -->
+              <Border Height="120" Background="{StaticResource Surface2Brush}"
+                      BorderBrush="{StaticResource StrokeSubtleBrush}" BorderThickness="1"
+                      CornerRadius="12" Margin="0,0,0,14">
+                <controls:SoulOrbControl x:Name="LiveSoulPreview" Width="112" Height="112"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center" />
+              </Border>
+
+              <!-- 5 Clickable Look Chips -->
+              <TextBlock Text="SELECT SOUL LOOK" FontSize="11" FontWeight="SemiBold"
+                         Foreground="{StaticResource Text2Brush}" Margin="0,0,0,8" />
+              <WrapPanel Orientation="Horizontal" Margin="0,0,0,6">
+                <!-- Cyan: VoidFlame -->
+                <Button x:Name="ChipCyan" Tag="VoidFlame" Click="OnLookChipClick" Style="{StaticResource LookChipButton}">
                   <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Border Width="6" Height="6" CornerRadius="3" Background="{StaticResource SoulEmeraldBrush}"
+                    <Ellipse Width="10" Height="10" Fill="#FF38BDF8" Margin="0,0,8,0" VerticalAlignment="Center" />
+                    <TextBlock Text="Cyan · Void" VerticalAlignment="Center" />
+                  </StackPanel>
+                </Button>
+
+                <!-- Violet: CyberOrb -->
+                <Button x:Name="ChipViolet" Tag="CyberOrb" Click="OnLookChipClick" Style="{StaticResource LookChipButton}">
+                  <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Ellipse Width="10" Height="10" Fill="#FF818CF8" Margin="0,0,8,0" VerticalAlignment="Center" />
+                    <TextBlock Text="Violet · Cyber" VerticalAlignment="Center" />
+                  </StackPanel>
+                </Button>
+
+                <!-- Emerald: EmeraldSpirit -->
+                <Button x:Name="ChipEmerald" Tag="EmeraldSpirit" Click="OnLookChipClick" Style="{StaticResource LookChipButton}">
+                  <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Ellipse Width="10" Height="10" Fill="#FF34D399" Margin="0,0,8,0" VerticalAlignment="Center" />
+                    <TextBlock Text="Emerald · Spirit" VerticalAlignment="Center" />
+                  </StackPanel>
+                </Button>
+
+                <!-- Amber: SolarEmber -->
+                <Button x:Name="ChipAmber" Tag="SolarEmber" Click="OnLookChipClick" Style="{StaticResource LookChipButton}">
+                  <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Ellipse Width="10" Height="10" Fill="#FFF59E0B" Margin="0,0,8,0" VerticalAlignment="Center" />
+                    <TextBlock Text="Amber · Solar" VerticalAlignment="Center" />
+                  </StackPanel>
+                </Button>
+
+                <!-- Crimson: VoidRipple -->
+                <Button x:Name="ChipCrimson" Tag="VoidRipple" Click="OnLookChipClick" Style="{StaticResource LookChipButton}">
+                  <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Ellipse Width="10" Height="10" Fill="#FFEC4899" Margin="0,0,8,0" VerticalAlignment="Center" />
+                    <TextBlock Text="Void · Crimson" VerticalAlignment="Center" />
+                  </StackPanel>
+                </Button>
+              </WrapPanel>
+
+              <!-- Compatibility binding anchor (hidden) -->
+              <ComboBox x:Name="SoulStyleInput" Visibility="Collapsed" />
+            </StackPanel>
+          </Border>
+
+          <!-- Slot 1: Name -->
+          <Border Style="{StaticResource GlassCard}" Margin="0,0,0,14">
+            <StackPanel>
+              <DockPanel Margin="0,0,0,10">
+                <TextBlock Text="SLOT 1 · COMPANION NAME" Style="{StaticResource CardEyebrow}" DockPanel.Dock="Left" />
+                <TextBlock Text="Spoken callsign on activation" Foreground="{StaticResource Text3Brush}"
+                           FontSize="11" HorizontalAlignment="Right" />
+              </DockPanel>
+              <TextBox x:Name="SoulNameInput" Height="34" />
+            </StackPanel>
+          </Border>
+
+          <!-- Slot 2: Personality & Instructions -->
+          <Border Style="{StaticResource GlassCard}">
+            <StackPanel>
+              <DockPanel Margin="0,0,0,10">
+                <TextBlock Text="SLOT 2 · PERSONALITY ARCHETYPE &amp; DIRECTIVES" Style="{StaticResource CardEyebrow}" DockPanel.Dock="Left" />
+                <TextBlock Text="Behavioral guidelines &amp; voice tone" Foreground="{StaticResource Text3Brush}"
+                           FontSize="11" HorizontalAlignment="Right" />
+              </DockPanel>
+
+              <TextBlock Text="ARCHETYPE PRESET" FontSize="11" FontWeight="SemiBold"
+                         Foreground="{StaticResource Text2Brush}" Margin="0,0,0,6" />
+              <ComboBox x:Name="PersonalityInput" SelectionChanged="OnPersonalityChanged" Margin="0,0,0,12" Height="34" />
+
+              <TextBlock Text="SYSTEM PROMPT INSTRUCTIONS" FontSize="11" FontWeight="SemiBold"
+                         Foreground="{StaticResource Text2Brush}" Margin="0,0,0,6" />
+              <TextBox x:Name="PersonalityPromptInput" MinHeight="110" MaxHeight="220" AcceptsReturn="True"
+                       TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+
+      <!-- ====================================================== -->
+      <!-- SECTION 1: VOICE & API KEY                             -->
+      <!-- ====================================================== -->
+      <ScrollViewer x:Name="SectionVoice" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,8,0">
+        <StackPanel Margin="0,0,0,16">
+          <DockPanel Margin="0,0,0,16">
+            <StackPanel>
+              <TextBlock Text="Voice &amp; Neural Connection" FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource Text1Brush}" />
+              <TextBlock Text="Windows DPAPI encrypted credentials, Google Gemini Live models, and acoustic synthesis."
+                         FontSize="12" Foreground="{StaticResource Text2Brush}" Margin="0,3,0,0" />
+            </StackPanel>
+          </DockPanel>
+
+          <!-- Slot 3: Voice & Model -->
+          <Border Style="{StaticResource GlassCard}" Margin="0,0,0,14">
+            <StackPanel>
+              <DockPanel Margin="0,0,0,12">
+                <TextBlock Text="SLOT 3 · ACOUSTICS &amp; INFERENCE MODEL" Style="{StaticResource CardEyebrow}" DockPanel.Dock="Left" />
+                <TextBlock Text="Real-time 24kHz PCM pipeline" Foreground="{StaticResource Text3Brush}"
+                           FontSize="11" HorizontalAlignment="Right" />
+              </DockPanel>
+
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="16" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
+                  <TextBlock Text="VOICE PRESET" FontSize="11" FontWeight="SemiBold"
+                             Foreground="{StaticResource Text2Brush}" Margin="0,0,0,6" />
+                  <ComboBox x:Name="VoiceInput" Height="34" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="2">
+                  <TextBlock Text="GEMINI LIVE MODEL ID" FontSize="11" FontWeight="SemiBold"
+                             Foreground="{StaticResource Text2Brush}" Margin="0,0,0,6" />
+                  <TextBox x:Name="ModelInput" Height="34" />
+                </StackPanel>
+              </Grid>
+            </StackPanel>
+          </Border>
+
+          <!-- 3-Step API Key Card -->
+          <Border Style="{StaticResource GlassCard}" Margin="0,0,0,14">
+            <StackPanel>
+              <DockPanel Margin="0,0,0,12">
+                <TextBlock Text="GEMINI LIVE API CREDENTIALS" Style="{StaticResource CardEyebrow}" DockPanel.Dock="Left" />
+                <TextBlock Text="Bring Your Own Key (BYOK) · Zero cloud telemetry" Foreground="{StaticResource Text3Brush}"
+                           FontSize="11" HorizontalAlignment="Right" />
+              </DockPanel>
+
+              <!-- Step 1: Get Key -->
+              <Border Style="{StaticResource SubCard}" Margin="0,0,0,8" Padding="12,10">
+                <DockPanel>
+                  <Button Content="Open Google AI Studio ↗" DockPanel.Dock="Right"
+                          Click="OnOpenApiKeyPageClick" Style="{StaticResource SecondaryButton}" Height="30" VerticalAlignment="Center" />
+                  <StackPanel VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                      <Border Background="{StaticResource Surface3Brush}" CornerRadius="4" Padding="5,1" Margin="0,0,8,0">
+                        <TextBlock Text="01" FontSize="10" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" />
+                      </Border>
+                      <TextBlock Text="Generate a free Gemini API key" FontWeight="SemiBold" FontSize="12.5" Foreground="{StaticResource Text1Brush}" />
+                    </StackPanel>
+                    <TextBlock Text="Create a project key on Google AI Studio with access to Gemini Live native audio preview."
+                               Foreground="{StaticResource Text2Brush}" FontSize="11" Margin="26,2,0,0" />
+                  </StackPanel>
+                </DockPanel>
+              </Border>
+
+              <!-- Step 2: Paste and Encrypt -->
+              <Border Style="{StaticResource SubCard}" Margin="0,0,0,8" Padding="12,10">
+                <StackPanel>
+                  <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <Border Background="{StaticResource Surface3Brush}" CornerRadius="4" Padding="5,1" Margin="0,0,8,0">
+                      <TextBlock Text="02" FontSize="10" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" />
+                    </Border>
+                    <TextBlock Text="Paste and encrypt with Windows DPAPI" FontWeight="SemiBold" FontSize="12.5" Foreground="{StaticResource Text1Brush}" />
+                  </StackPanel>
+                  <DockPanel Margin="26,0,0,0">
+                    <Button Content="Save Encrypted Key" DockPanel.Dock="Right" Click="OnSaveApiKeyClick"
+                            Style="{StaticResource PrimaryButton}" Height="34" Margin="10,0,0,0" />
+                    <PasswordBox x:Name="ApiKeyInput" Height="34" />
+                  </DockPanel>
+                </StackPanel>
+              </Border>
+
+              <!-- Step 3: Status Badge Inline -->
+              <Border Style="{StaticResource SubCard}" Margin="0" Padding="12,10">
+                <DockPanel>
+                  <Border DockPanel.Dock="Left" Background="{StaticResource Surface3Brush}" CornerRadius="4" Padding="5,1" Margin="0,0,8,0" VerticalAlignment="Center">
+                    <TextBlock Text="03" FontSize="10" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" />
+                  </Border>
+                  <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Width="6" Height="6" CornerRadius="3" Background="{StaticResource SuccessBrush}"
                             VerticalAlignment="Center" Margin="0,0,8,0" />
-                    <TextBlock x:Name="ApiKeyStatus" Foreground="{StaticResource SoulEmeraldBrush}"
-                               FontSize="12" FontWeight="Medium" VerticalAlignment="Center" />
+                    <TextBlock x:Name="ApiKeyStatus" Foreground="{StaticResource Text2Brush}"
+                               FontSize="11.5" FontWeight="Medium" VerticalAlignment="Center" />
+                  </StackPanel>
+                </DockPanel>
+              </Border>
+            </StackPanel>
+          </Border>
+
+          <!-- Global Hotkeys Guide Card -->
+          <Border Style="{StaticResource GlassCard}">
+            <StackPanel>
+              <DockPanel Margin="0,0,0,12">
+                <TextBlock Text="SYSTEM-WIDE SHORTCUTS" Style="{StaticResource CardEyebrow}" DockPanel.Dock="Left" />
+                <TextBlock Text="Active anywhere across Windows" Foreground="{StaticResource Text3Brush}"
+                           FontSize="11" HorizontalAlignment="Right" />
+              </DockPanel>
+
+              <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Style="{StaticResource SubCard}" Margin="0,0,6,0">
+                  <StackPanel>
+                    <DockPanel Margin="0,0,0,4">
+                      <TextBlock Text="Ctrl + Alt + Space" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource AccentBrush}" />
+                    </DockPanel>
+                    <TextBlock Text="Start/stop Live voice session or expand Island dock." FontSize="11" Foreground="{StaticResource Text2Brush}" />
                   </StackPanel>
                 </Border>
-              </StackPanel>
-            </Border>
 
-            <!-- Step 3: Global Hotkeys Guide -->
-            <Border Style="{StaticResource GlassCard}">
-              <StackPanel>
-                <DockPanel Margin="0,0,0,12">
-                  <TextBlock Text="03 · GLOBAL HOTKEYS &amp; SUMMONING" Style="{StaticResource CardEyebrow}" DockPanel.Dock="Left" />
-                  <TextBlock Text="Active anywhere across Windows" Foreground="{StaticResource TextMutedBrush}"
-                             FontSize="11" HorizontalAlignment="Right" />
-                </DockPanel>
-                <TextBlock Text="Hitodama stays docked at the top of your primary display. Summon or interact instantly using these shortcuts:"
-                           Foreground="{StaticResource TextSecondaryBrush}" FontSize="12.5" Margin="0,0,0,14" />
-
-                <StackPanel>
-                  <!-- Shortcut 1: Talk -->
-                  <Border Style="{StaticResource SubCard}" Margin="0,0,0,8" Padding="14,12">
-                    <DockPanel>
-                      <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
-                        <Border Style="{StaticResource KeyBadge}" Margin="0,0,4,0">
-                          <TextBlock Text="Ctrl" Style="{StaticResource KeyBadgeText}" />
-                        </Border>
-                        <TextBlock Text="+" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,0,6,0" />
-                        <Border Style="{StaticResource KeyBadge}" Margin="0,0,4,0">
-                          <TextBlock Text="Alt" Style="{StaticResource KeyBadgeText}" />
-                        </Border>
-                        <TextBlock Text="+" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,0,6,0" />
-                        <Border Style="{StaticResource KeyBadge}" Padding="9,2">
-                          <TextBlock Text="Space" Style="{StaticResource KeyBadgeText}" />
-                        </Border>
-                      </StackPanel>
-                      <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="Summon &amp; Talk" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="13" />
-                        <TextBlock Text="Expand the Dynamic Island or toggle bidirectional voice session"
-                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="11.5" Margin="0,2,0,0" />
-                      </StackPanel>
+                <Border Grid.Column="1" Style="{StaticResource SubCard}" Margin="6,0,0,0">
+                  <StackPanel>
+                    <DockPanel Margin="0,0,0,4">
+                      <TextBlock Text="Hold Ctrl + Shift" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource AccentBrush}" />
                     </DockPanel>
-                  </Border>
+                    <TextBlock Text="Circle to Ask screen region lasso with voice question." FontSize="11" Foreground="{StaticResource Text2Brush}" />
+                  </StackPanel>
+                </Border>
+              </Grid>
 
-                  <!-- Shortcut 2: Circle to Ask -->
-                  <Border Style="{StaticResource SubCard}" Margin="0,0,0,8" Padding="14,12">
-                    <DockPanel>
-                      <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
-                        <TextBlock Text="Hold" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="11" />
-                        <Border Style="{StaticResource KeyBadge}" Margin="0,0,4,0">
-                          <TextBlock Text="Ctrl" Style="{StaticResource KeyBadgeText}" />
-                        </Border>
-                        <TextBlock Text="+" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,0,6,0" />
-                        <Border Style="{StaticResource KeyBadge}">
-                          <TextBlock Text="Shift" Style="{StaticResource KeyBadgeText}" />
-                        </Border>
-                      </StackPanel>
-                      <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="Circle to Ask" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="13" />
-                        <TextBlock Text="Draw a lasso circle on any screen region with mouse and ask a question out loud"
-                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="11.5" Margin="0,2,0,0" />
-                      </StackPanel>
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Style="{StaticResource SubCard}" Margin="0,0,6,0">
+                  <StackPanel>
+                    <DockPanel Margin="0,0,0,4">
+                      <TextBlock Text="Hold Ctrl + Win" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource AccentBrush}" />
                     </DockPanel>
-                  </Border>
+                    <TextBlock Text="Speech dictation cleaned into active foreground text cursor." FontSize="11" Foreground="{StaticResource Text2Brush}" />
+                  </StackPanel>
+                </Border>
 
-                  <!-- Shortcut 3: Clean Dictation -->
-                  <Border Style="{StaticResource SubCard}" Margin="0" Padding="14,12">
-                    <DockPanel>
-                      <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
-                        <TextBlock Text="Hold" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="11" />
-                        <Border Style="{StaticResource KeyBadge}" Margin="0,0,4,0">
-                          <TextBlock Text="Ctrl" Style="{StaticResource KeyBadgeText}" />
-                        </Border>
-                        <TextBlock Text="+" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,0,6,0" />
-                        <Border Style="{StaticResource KeyBadge}">
-                          <TextBlock Text="Win" Style="{StaticResource KeyBadgeText}" />
-                        </Border>
-                      </StackPanel>
-                      <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="Clean Dictation" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" FontSize="13" />
-                        <TextBlock Text="Hold keys, speak naturally, and release to stream cleanly formatted text into active cursor"
-                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="11.5" Margin="0,2,0,0" />
-                      </StackPanel>
+                <Border Grid.Column="1" Style="{StaticResource SubCard}" Margin="6,0,0,0">
+                  <StackPanel>
+                    <DockPanel Margin="0,0,0,4">
+                      <TextBlock Text="Ctrl + Alt + Backspace" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource DangerBrush}" />
                     </DockPanel>
-                  </Border>
-                </StackPanel>
-              </StackPanel>
-            </Border>
+                    <TextBlock Text="Emergency kill switch terminating all active audio and tools." FontSize="11" Foreground="{StaticResource Text2Brush}" />
+                  </StackPanel>
+                </Border>
+              </Grid>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
 
+      <!-- ====================================================== -->
+      <!-- SECTION 2: ABILITIES                                   -->
+      <!-- ====================================================== -->
+      <ScrollViewer x:Name="SectionAbilities" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,8,0">
+        <StackPanel Margin="0,0,0,16">
+          <DockPanel Margin="0,0,0,16">
+            <StackPanel>
+              <TextBlock Text="Autonomous Ability Packs" FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource Text1Brush}" />
+              <TextBlock Text="Toggle modules enabled for Void during conversational execution."
+                         FontSize="12" Foreground="{StaticResource Text2Brush}" Margin="0,3,0,0" />
+            </StackPanel>
+          </DockPanel>
+
+          <Border Style="{StaticResource GlassCard}">
+            <StackPanel>
+              <DockPanel Margin="0,0,0,14">
+                <TextBlock Text="SLOT 4 · PERMITTED ABILITIES" Style="{StaticResource CardEyebrow}" DockPanel.Dock="Left" />
+                <TextBlock Text="Enforced by Gatekeeper Security Engine" Foreground="{StaticResource Text3Brush}"
+                           FontSize="11" HorizontalAlignment="Right" />
+              </DockPanel>
+
+              <UniformGrid Columns="2">
+                <Border Style="{StaticResource SubCard}">
+                  <CheckBox x:Name="SystemAbility">
+                    <StackPanel Margin="4,0,0,0">
+                      <TextBlock Text="System Controls" FontWeight="SemiBold" Foreground="{StaticResource Text1Brush}" FontSize="12.5" />
+                      <TextBlock Text="Master volume, mute, brightness, Wi-Fi radio &amp; dark mode"
+                                 Foreground="{StaticResource Text2Brush}" FontSize="11" Margin="0,2,0,0" />
+                    </StackPanel>
+                  </CheckBox>
+                </Border>
+
+                <Border Style="{StaticResource SubCard}">
+                  <CheckBox x:Name="DesktopAbility">
+                    <StackPanel Margin="4,0,0,0">
+                      <TextBlock Text="Desktop UIA" FontWeight="SemiBold" Foreground="{StaticResource Text1Brush}" FontSize="12.5" />
+                      <TextBlock Text="Window focus, UI Automation clicks &amp; keystroke automation"
+                                 Foreground="{StaticResource Text2Brush}" FontSize="11" Margin="0,2,0,0" />
+                    </StackPanel>
+                  </CheckBox>
+                </Border>
+
+                <Border Style="{StaticResource SubCard}">
+                  <CheckBox x:Name="PlannerAbility">
+                    <StackPanel Margin="4,0,0,0">
+                      <TextBlock Text="Planner &amp; Routines" FontWeight="SemiBold" Foreground="{StaticResource Text1Brush}" FontSize="12.5" />
+                      <TextBlock Text="Scheduled actions, to-do tracking &amp; recurring alarms"
+                                 Foreground="{StaticResource Text2Brush}" FontSize="11" Margin="0,2,0,0" />
+                    </StackPanel>
+                  </CheckBox>
+                </Border>
+
+                <Border Style="{StaticResource SubCard}">
+                  <CheckBox x:Name="MediaAbility">
+                    <StackPanel Margin="4,0,0,0">
+                      <TextBlock Text="Media Island" FontWeight="SemiBold" Foreground="{StaticResource Text1Brush}" FontSize="12.5" />
+                      <TextBlock Text="Windows GSMTC playback controls, album art &amp; seek bar"
+                                 Foreground="{StaticResource Text2Brush}" FontSize="11" Margin="0,2,0,0" />
+                    </StackPanel>
+                  </CheckBox>
+                </Border>
+
+                <Border Style="{StaticResource SubCard}">
+                  <CheckBox x:Name="ResearchAbility">
+                    <StackPanel Margin="4,0,0,0">
+                      <TextBlock Text="Web Research" FontWeight="SemiBold" Foreground="{StaticResource Text1Brush}" FontSize="12.5" />
+                      <TextBlock Text="Information retrieval, web lookups &amp; web scraping"
+                                 Foreground="{StaticResource Text2Brush}" FontSize="11" Margin="0,2,0,0" />
+                    </StackPanel>
+                  </CheckBox>
+                </Border>
+
+                <Border Style="{StaticResource SubCard}">
+                  <CheckBox x:Name="MemoryAbility">
+                    <StackPanel Margin="4,0,0,0">
+                      <TextBlock Text="Persistent Memory" FontWeight="SemiBold" Foreground="{StaticResource Text1Brush}" FontSize="12.5" />
+                      <TextBlock Text="Episodic fact storage in SQLite with FTS5 search"
+                                 Foreground="{StaticResource Text2Brush}" FontSize="11" Margin="0,2,0,0" />
+                    </StackPanel>
+                  </CheckBox>
+                </Border>
+              </UniformGrid>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+
+      <!-- ====================================================== -->
+      <!-- SECTION 3: MEMORIES & SECURITY AUDIT                   -->
+      <!-- ====================================================== -->
+      <Grid x:Name="SectionMemories" Visibility="Collapsed">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <DockPanel Grid.Row="0" Margin="0,0,0,14">
+          <StackPanel>
+            <TextBlock Text="Episodic Memory &amp; Security Trail" FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource Text1Brush}" />
+            <TextBlock Text="Inspect stored user facts and tool execution audit confirmations."
+                       FontSize="12" Foreground="{StaticResource Text2Brush}" Margin="0,3,0,0" />
           </StackPanel>
-        </ScrollViewer>
-      </TabItem>
+        </DockPanel>
 
-      <!-- ========================================== -->
-      <!-- TAB 3: MEMORY & AUDIT                      -->
-      <!-- ========================================== -->
-      <TabItem Header="03   Memory &amp; audit">
-        <Grid Margin="0,4,0,12">
+        <Grid Grid.Row="1">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*" />
             <ColumnDefinition Width="14" />
@@ -374,24 +572,47 @@
           <!-- Left Column: Memories -->
           <Border Grid.Column="0" Style="{StaticResource GlassCard}">
             <DockPanel>
-              <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
-                <TextBlock Text="PERSISTENT MEMORIES" Style="{StaticResource CardEyebrow}" DockPanel.Dock="Left" />
-                <TextBlock Text="Local episodic database" Foreground="{StaticResource TextMutedBrush}"
+              <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+                <TextBlock Text="STORED FACTS (FTS5)" Style="{StaticResource CardEyebrow}" DockPanel.Dock="Left" />
+                <TextBlock Text="SQLite WAL Indexed" Foreground="{StaticResource Text3Brush}"
                            FontSize="11" HorizontalAlignment="Right" />
               </DockPanel>
 
+              <!-- Search Bar -->
+              <TextBox x:Name="MemorySearchBox" DockPanel.Dock="Top" Height="32" Margin="0,0,0,8"
+                       Padding="8,0" TextChanged="OnMemorySearchChanged" />
+
               <!-- Bottom Action Bar -->
-              <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,12,0,0">
-                <Button x:Name="DeleteMemoryButton" Content="Delete selected"
-                        Click="OnDeleteMemoryClick" Style="{StaticResource DangerButton}" Margin="0,0,8,0" />
-                <Button Content="Export CSV" Click="OnExportMemoryClick" />
+              <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,10,0,0">
+                <Button x:Name="DeleteMemoryButton" Content="Delete Selected"
+                        Click="OnDeleteMemoryClick" Style="{StaticResource DangerButton}" Height="30" Margin="0,0,8,0" />
+                <Button Content="Export CSV" Click="OnExportMemoryClick" Style="{StaticResource SecondaryButton}" Height="30" />
               </StackPanel>
 
               <!-- Inset Memory List -->
-              <Border Background="#10FFFFFF" BorderBrush="#18FFFFFF" BorderThickness="1"
+              <Border Background="{StaticResource Surface2Brush}" BorderBrush="{StaticResource StrokeSubtleBrush}" BorderThickness="1"
                       CornerRadius="10" Padding="6">
-                <ListBox x:Name="MemoryList" DisplayMemberPath="Fact"
-                         SelectionChanged="OnMemorySelectionChanged" />
+                <ListBox x:Name="MemoryList" SelectionChanged="OnMemorySelectionChanged"
+                         Background="Transparent" BorderThickness="0">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate>
+                      <Border Background="{StaticResource Surface1Brush}" BorderBrush="{StaticResource StrokeSubtleBrush}"
+                              BorderThickness="1" CornerRadius="8" Padding="10,8" Margin="0,2,0,2">
+                        <DockPanel>
+                          <Button DockPanel.Dock="Right" Content="✕" Style="{StaticResource GhostButton}"
+                                  Width="24" Height="24" Padding="0" Tag="{Binding Id}"
+                                  Click="OnDeleteIndividualMemoryClick" VerticalAlignment="Center" />
+                          <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Fact}" Foreground="{StaticResource Text1Brush}"
+                                       FontSize="12" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding CreatedUtc, StringFormat='{}{0:g}'}"
+                                       Foreground="{StaticResource Text3Brush}" FontSize="10" Margin="0,2,0,0" />
+                          </StackPanel>
+                        </DockPanel>
+                      </Border>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
               </Border>
             </DockPanel>
           </Border>
@@ -399,44 +620,88 @@
           <!-- Right Column: Security Audit -->
           <Border Grid.Column="2" Style="{StaticResource GlassCard}">
             <DockPanel>
-              <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
-                <TextBlock Text="SECURITY AUDIT LOG" Style="{StaticResource CardEyebrow}" DockPanel.Dock="Left" />
-                <TextBlock Text="Action trail &amp; confirmations" Foreground="{StaticResource TextMutedBrush}"
+              <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+                <TextBlock Text="SECURITY AUDIT TRAIL" Style="{StaticResource CardEyebrow}" DockPanel.Dock="Left" />
+                <TextBlock Text="Tool confirmations" Foreground="{StaticResource Text3Brush}"
                            FontSize="11" HorizontalAlignment="Right" />
               </DockPanel>
 
               <!-- Monospace Inset Terminal Viewer -->
-              <Border Background="#120A0A0E" BorderBrush="#18FFFFFF" BorderThickness="1"
+              <Border Background="{StaticResource Surface2Brush}" BorderBrush="{StaticResource StrokeSubtleBrush}" BorderThickness="1"
                       CornerRadius="10" Padding="10">
                 <TextBox x:Name="AuditText" IsReadOnly="True" AcceptsReturn="True"
                          TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"
                          FontFamily="Consolas, Cascadia Code, Segoe UI Variable Text" FontSize="11.5"
-                         Foreground="{StaticResource TextSecondaryBrush}"
+                         Foreground="{StaticResource Text2Brush}"
                          Background="Transparent" BorderThickness="0" Padding="0" />
               </Border>
             </DockPanel>
           </Border>
         </Grid>
-      </TabItem>
+      </Grid>
 
-    </TabControl>
+      <!-- ====================================================== -->
+      <!-- SECTION 4: ABOUT                                       -->
+      <!-- ====================================================== -->
+      <ScrollViewer x:Name="SectionAbout" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,8,0">
+        <StackPanel Margin="0,0,0,16">
+          <DockPanel Margin="0,0,0,16">
+            <StackPanel>
+              <TextBlock Text="About Void AI" FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource Text1Brush}" />
+              <TextBlock Text="Native, voice-first desktop companion engineered for Windows 10 &amp; 11."
+                         FontSize="12" Foreground="{StaticResource Text2Brush}" Margin="0,3,0,0" />
+            </StackPanel>
+          </DockPanel>
 
-    <!-- Bottom Footer Bar -->
-    <Border Grid.Row="2" Margin="0,16,0,0" Padding="0,12,0,0"
-            BorderBrush="#18FFFFFF" BorderThickness="0,1,0,0">
-      <DockPanel>
-        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-          <Border Width="6" Height="6" CornerRadius="3" Background="{StaticResource AccentBrush}"
-                  VerticalAlignment="Center" Margin="0,0,8,0">
+          <Border Style="{StaticResource GlassCard}" Margin="0,0,0,14">
+            <StackPanel>
+              <DockPanel Margin="0,0,0,12">
+                <TextBlock Text="FOUNDERS EDITION · ENGINE SPECIFICATIONS" Style="{StaticResource CardEyebrow}" DockPanel.Dock="Left" />
+                <TextBlock Text="v1.0.0" Foreground="{StaticResource Text3Brush}"
+                           FontSize="11" HorizontalAlignment="Right" />
+              </DockPanel>
+
+              <TextBlock Text="Void gives your computer a soul through a top-of-screen Dynamic Island overlay. Built natively in C# 12 and .NET 8 WPF with zero web runtimes."
+                         Foreground="{StaticResource Text1Brush}" FontSize="12.5" TextWrapping="Wrap" Margin="0,0,0,14" />
+
+              <UniformGrid Columns="2" Margin="0,0,0,8">
+                <Border Style="{StaticResource SubCard}">
+                  <StackPanel>
+                    <TextBlock Text="120Hz Harmonic Springs" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" FontSize="12" />
+                    <TextBlock Text="Second-order physics engine unhooking CompositionTarget.Rendering at rest (0.0% idle CPU)."
+                               Foreground="{StaticResource Text2Brush}" FontSize="11" Margin="0,2,0,0" TextWrapping="Wrap" />
+                  </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource SubCard}">
+                  <StackPanel>
+                    <TextBlock Text="Zero-Polling Scheduling" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" FontSize="12" />
+                    <TextBlock Text="Waitable timer with single background thread; 0.0% CPU usage while awaiting triggers."
+                               Foreground="{StaticResource Text2Brush}" FontSize="11" Margin="0,2,0,0" TextWrapping="Wrap" />
+                  </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource SubCard}">
+                  <StackPanel>
+                    <TextBlock Text="Windows DPAPI Encryption" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" FontSize="12" />
+                    <TextBlock Text="Your Google Gemini API key never leaves your local machine unencrypted."
+                               Foreground="{StaticResource Text2Brush}" FontSize="11" Margin="0,2,0,0" TextWrapping="Wrap" />
+                  </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource SubCard}">
+                  <StackPanel>
+                    <TextBlock Text="SQLite WAL &amp; FTS5" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" FontSize="12" />
+                    <TextBlock Text="Instant full-text memory retrieval with transactional consistency and zero locking jitter."
+                               Foreground="{StaticResource Text2Brush}" FontSize="11" Margin="0,2,0,0" TextWrapping="Wrap" />
+                  </StackPanel>
+                </Border>
+              </UniformGrid>
+            </StackPanel>
           </Border>
-          <TextBlock x:Name="SaveStatus" Foreground="{StaticResource TextSecondaryBrush}"
-                     FontSize="12" VerticalAlignment="Center" />
         </StackPanel>
+      </ScrollViewer>
 
-        <Button Content="Save loadout" DockPanel.Dock="Right" Click="OnSaveLoadoutClick"
-                Style="{StaticResource PrimaryButton}" Padding="22,9" FontSize="13" />
-      </DockPanel>
-    </Border>
-
+    </Grid>
   </Grid>
 </Window>

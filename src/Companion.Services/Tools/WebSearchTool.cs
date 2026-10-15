@@ -69,7 +69,7 @@ public sealed class WebSearchTool : ITool
             string url = $"https://html.duckduckgo.com/html/?q={encoded}";
 
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
-            req.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) HitodamaAI/1.0");
+            req.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) VoidAI/1.0");
 
             var resp = await _httpClient.SendAsync(req, cancellationToken).ConfigureAwait(false);
             if (!resp.IsSuccessStatusCode)

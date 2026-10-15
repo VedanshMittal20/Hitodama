@@ -1,0 +1,139 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib"
+                    xmlns:po="http://schemas.microsoft.com/winfx/2006/xaml/presentation/options"
+                    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                    mc:Ignorable="po">
+
+  <!-- ======================================================== -->
+  <!-- SURFACES (Quiet Glass Tiered Elevation)                  -->
+  <!-- ======================================================== -->
+  <!-- Surface0: Island / Studio obsidian base -->
+  <Color x:Key="Surface0Color">#FF0B0C0F</Color>
+  <SolidColorBrush x:Key="Surface0Brush" Color="{StaticResource Surface0Color}" po:Freeze="True" />
+  <SolidColorBrush x:Key="SurfaceBaseBrush" Color="{StaticResource Surface0Color}" po:Freeze="True" />
+  <SolidColorBrush x:Key="IslandGlassBrush" Color="{StaticResource Surface0Color}" po:Freeze="True" />
+  <SolidColorBrush x:Key="IslandBaseBrush" Color="{StaticResource Surface0Color}" po:Freeze="True" />
+
+  <!-- Surface1: Card container -->
+  <Color x:Key="Surface1Color">#FF12141A</Color>
+  <SolidColorBrush x:Key="Surface1Brush" Color="{StaticResource Surface1Color}" po:Freeze="True" />
+  <SolidColorBrush x:Key="SurfaceElevatedBrush" Color="{StaticResource Surface1Color}" po:Freeze="True" />
+  <SolidColorBrush x:Key="GlassCardBrush" Color="{StaticResource Surface1Color}" po:Freeze="True" />
+
+  <!-- Surface2: Raised element or hover state -->
+  <Color x:Key="Surface2Color">#FF1A1D26</Color>
+  <SolidColorBrush x:Key="Surface2Brush" Color="{StaticResource Surface2Color}" po:Freeze="True" />
+  <SolidColorBrush x:Key="SurfaceHoverBrush" Color="{StaticResource Surface2Color}" po:Freeze="True" />
+  <SolidColorBrush x:Key="GlassCardHoverBrush" Color="{StaticResource Surface2Color}" po:Freeze="True" />
+
+  <!-- Surface3: Pressed, active, or selected tile -->
+  <Color x:Key="Surface3Color">#FF222633</Color>
+  <SolidColorBrush x:Key="Surface3Brush" Color="{StaticResource Surface3Color}" po:Freeze="True" />
+
+  <!-- ======================================================== -->
+  <!-- STROKES & BORDERS (Hairline 1px, No Heavy Shadows)       -->
+  <!-- ======================================================== -->
+  <!-- Subtle stroke: 8% white -->
+  <Color x:Key="StrokeSubtleColor">#14FFFFFF</Color>
+  <SolidColorBrush x:Key="StrokeSubtleBrush" Color="{StaticResource StrokeSubtleColor}" po:Freeze="True" />
+  <SolidColorBrush x:Key="GlassCardBorderBrush" Color="{StaticResource StrokeSubtleColor}" po:Freeze="True" />
+
+  <!-- Strong stroke: 16% white -->
+  <Color x:Key="StrokeStrongColor">#29FFFFFF</Color>
+  <SolidColorBrush x:Key="StrokeStrongBrush" Color="{StaticResource StrokeStrongColor}" po:Freeze="True" />
+  <SolidColorBrush x:Key="SurfaceBorderBrush" Color="{StaticResource StrokeStrongColor}" po:Freeze="True" />
+  <SolidColorBrush x:Key="IslandSpecularBorderBrush" Color="{StaticResource StrokeStrongColor}" po:Freeze="True" />
+  <SolidColorBrush x:Key="GlassCardBorderHoverBrush" Color="{StaticResource StrokeStrongColor}" po:Freeze="True" />
+
+  <!-- Specular top-edge highlight brush (Hairline 1px accent) -->
+  <LinearGradientBrush x:Key="TopEdgeSpecularBrush" StartPoint="0,0" EndPoint="0,1" po:Freeze="True">
+    <GradientStop Color="#30FFFFFF" Offset="0.0" />
+    <GradientStop Color="#00FFFFFF" Offset="1.0" />
+  </LinearGradientBrush>
+
+  <!-- ======================================================== -->
+  <!-- TYPOGRAPHY / TEXT (WCAG Contrast Hierarchy)              -->
+  <!-- ======================================================== -->
+  <!-- Text1: Primary text, headers (94% white) -->
+  <Color x:Key="Text1Color">#F0FFFFFF</Color>
+  <SolidColorBrush x:Key="Text1Brush" Color="{StaticResource Text1Color}" po:Freeze="True" />
+  <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource Text1Color}" po:Freeze="True" />
+
+  <!-- Text2: Subtitles, metadata, labels (62% white) -->
+  <Color x:Key="Text2Color">#9EFFFFFF</Color>
+  <SolidColorBrush x:Key="Text2Brush" Color="{StaticResource Text2Color}" po:Freeze="True" />
+  <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource Text2Color}" po:Freeze="True" />
+
+  <!-- Text3: Decorative, shortcuts, muted hints (38% white) -->
+  <Color x:Key="Text3Color">#61FFFFFF</Color>
+  <SolidColorBrush x:Key="Text3Brush" Color="{StaticResource Text3Color}" po:Freeze="True" />
+  <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource Text3Color}" po:Freeze="True" />
+
+  <!-- Text on Accent: dark obsidian for high contrast on bright accent buttons -->
+  <Color x:Key="TextOnAccentColor">#FF0B0C0F</Color>
+  <SolidColorBrush x:Key="TextOnAccentBrush" Color="{StaticResource TextOnAccentColor}" po:Freeze="True" />
+
+  <!-- ======================================================== -->
+  <!-- ACCENTS & SOUL COLOR SYSTEM                              -->
+  <!-- ======================================================== -->
+  <!-- Master Accent Brush (Quiet Glass Cyan, re-pointed from legacy coral) -->
+  <Color x:Key="AccentColor">#FF38BDF8</Color>
+  <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" po:Freeze="True" />
+  <SolidColorBrush x:Key="AccentGlassBrush" Color="#2038BDF8" po:Freeze="True" />
+  <SolidColorBrush x:Key="AccentBorderBrush" Color="#6038BDF8" po:Freeze="True" />
+  <SolidColorBrush x:Key="TabPillActiveBrush" Color="#2538BDF8" po:Freeze="True" />
+
+  <!-- Soul Palette -->
+  <Color x:Key="SoulCyanColor">#FF38BDF8</Color>
+  <Color x:Key="SoulVioletColor">#FF818CF8</Color>
+  <Color x:Key="SoulEmeraldColor">#FF34D399</Color>
+  <Color x:Key="SoulAmberColor">#FFFBBF24</Color>
+  <Color x:Key="SoulCrimsonColor">#FFF87171</Color>
+
+  <SolidColorBrush x:Key="SoulCyanBrush" Color="{StaticResource SoulCyanColor}" po:Freeze="True" />
+  <SolidColorBrush x:Key="SoulVioletBrush" Color="{StaticResource SoulVioletColor}" po:Freeze="True" />
+  <SolidColorBrush x:Key="SoulEmeraldBrush" Color="{StaticResource SoulEmeraldColor}" po:Freeze="True" />
+  <SolidColorBrush x:Key="SoulAmberBrush" Color="{StaticResource SoulAmberColor}" po:Freeze="True" />
+  <SolidColorBrush x:Key="SoulCrimsonBrush" Color="{StaticResource SoulCrimsonColor}" po:Freeze="True" />
+
+  <!-- Semantics -->
+  <Color x:Key="SuccessColor">#FF34D399</Color>
+  <SolidColorBrush x:Key="SuccessBrush" Color="{StaticResource SuccessColor}" po:Freeze="True" />
+  <SolidColorBrush x:Key="SemanticSuccessBrush" Color="{StaticResource SuccessColor}" po:Freeze="True" />
+
+  <Color x:Key="WarningColor">#FFFBBF24</Color>
+  <SolidColorBrush x:Key="WarningBrush" Color="{StaticResource WarningColor}" po:Freeze="True" />
+
+  <Color x:Key="DangerColor">#FFF87171</Color>
+  <SolidColorBrush x:Key="DangerBrush" Color="{StaticResource DangerColor}" po:Freeze="True" />
+  <SolidColorBrush x:Key="SemanticDangerBrush" Color="{StaticResource DangerColor}" po:Freeze="True" />
+
+  <!-- ======================================================== -->
+  <!-- TYPE SCALE (Segoe UI Variable)                           -->
+  <!-- ======================================================== -->
+  <FontFamily x:Key="AppFontFamily">Segoe UI Variable Display, Segoe UI Variable Text, Segoe UI, sans-serif</FontFamily>
+  <FontFamily x:Key="MonoFontFamily">Cascadia Code, Consolas, Segoe UI Variable Text, monospace</FontFamily>
+
+  <sys:Double x:Key="FontSizeCaption">11</sys:Double>
+  <sys:Double x:Key="FontSizeBodySmall">12</sys:Double>
+  <sys:Double x:Key="FontSizeBody">13</sys:Double>
+  <sys:Double x:Key="FontSizeTitle">15</sys:Double>
+  <sys:Double x:Key="FontSizeDisplay">20</sys:Double>
+
+  <!-- ======================================================== -->
+  <!-- SPACING & CONCENTRIC RADII (4px grid)                    -->
+  <!-- ======================================================== -->
+  <CornerRadius x:Key="ControlRadius">8</CornerRadius>
+  <CornerRadius x:Key="CardRadius">12</CornerRadius>
+  <CornerRadius x:Key="PanelRadius">16</CornerRadius>
+  <CornerRadius x:Key="IslandExpandedRadius">32</CornerRadius>
+  <CornerRadius x:Key="IslandCollapsedRadius">18</CornerRadius>
+
+  <Thickness x:Key="Space4">4</Thickness>
+  <Thickness x:Key="Space8">8</Thickness>
+  <Thickness x:Key="Space12">12</Thickness>
+  <Thickness x:Key="Space16">16</Thickness>
+  <Thickness x:Key="Space24">24</Thickness>
+
+</ResourceDictionary>

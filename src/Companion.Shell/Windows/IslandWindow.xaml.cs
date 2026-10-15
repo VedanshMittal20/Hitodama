@@ -14,6 +14,7 @@ using Companion.Services;
 using Microsoft.Win32;
 using System.Data;
 using System.Windows.Media.Animation;
+using Companion.Shell;
 using Color = System.Windows.Media.Color;
 using Button = System.Windows.Controls.Button;
 using CheckBox = System.Windows.Controls.CheckBox;
@@ -165,6 +166,8 @@ public partial class IslandWindow : Window
 
     private readonly IslandAnimator _animator = new();
     private readonly DatabaseService _database = new();
+    private readonly IslandActivityCoordinator _activityCoordinator = new();
+    private readonly CountdownTimerService _countdownTimer;
     private readonly SystemControlService _systemControls = new();
     private readonly GlobalInputService _globalInput = new();
     private readonly MouseMonitorTracker _mouseMonitorTracker = new();
@@ -177,16 +180,22 @@ public partial class IslandWindow : Window
     private GeminiLiveService? _geminiLive;
     private CancellationTokenSource? _voiceSessionCancellation;
     private bool _voiceSessionStarting;
+    private bool _liveVoiceFailureReported;
     private readonly SpringValue _widthSpring;
     private readonly SpringValue _heightSpring;
     private readonly SpringValue _cornerRadiusSpring;
     private readonly SpringValue _expandedOpacitySpring;
+    private readonly SpringValue _tabIndicatorSpring;
+    private int _previousTab;
+    private bool _isReducedMotion;
     private readonly MediaService _mediaService = new();
     private readonly GatekeeperSecurityEngine _gatekeeper;
     private readonly ToolExecutionService _toolExecution;
     private TaskCompletionSource<bool>? _permissionTcs;
     private readonly System.Windows.Threading.DispatcherTimer _idleTrimTimer;
     private readonly System.Windows.Threading.DispatcherTimer _mediaProgressTimer;
+    private readonly System.Windows.Threading.DispatcherTimer _clockTimer;
+    private readonly System.Windows.Threading.DispatcherTimer _timerDisplayTimer;
     private readonly WinEventDelegate _winEventCallback;
     private IntPtr _windowHandle;
     private IntPtr _lastActiveExternalWindow;
@@ -198,14 +207,23 @@ public partial class IslandWindow : Window
     private IReadOnlyList<string> _wallpapers = [];
     private IReadOnlyList<ClipEntry> _clipboardEntries = [];
     private bool _suppressClipboardRecording;
+    private long _activitySequence;
+    private string? _displayedTransientActivityId;
     private string? _positionedMonitorDeviceName;
     private SoulLoadout _loadout = new();
+    private string? _albumPaletteKey;
+    private Color _albumPrimaryColor = Color.FromRgb(56, 189, 248);
+    private Color _albumSecondaryColor = Color.FromRgb(129, 140, 248);
 
     public IslandWindow()
     {
         InitializeComponent();
 
+        _activityCoordinator.CurrentActivityChanged += OnCurrentActivityChanged;
+        _activityCoordinator.Publish("idle-clock", IslandActivityKind.IdleClock, "Clock", "", lifetime: null);
         _dictation = new DictationService(_database);
+        _countdownTimer = new CountdownTimerService(_database);
+        _countdownTimer.Completed += OnCountdownTimerCompleted;
         _circleOverlay = new CircleToAskOverlay();
         _gatekeeper = new GatekeeperSecurityEngine(PromptPermissionApprovalAsync, _database);
         _toolExecution = new ToolExecutionService(
@@ -218,6 +236,7 @@ public partial class IslandWindow : Window
         _heightSpring = _animator.CreateSpring(36);
         _cornerRadiusSpring = _animator.CreateSpring(18);
         _expandedOpacitySpring = _animator.CreateSpring(0.0, omega: 28.0, zeta: 0.82);
+        _tabIndicatorSpring = _animator.CreateSpring(0.0, omega: 26.0, zeta: 0.85);
         _idleTrimTimer = new System.Windows.Threading.DispatcherTimer
         {
             Interval = TimeSpan.FromMinutes(2)
@@ -228,6 +247,13 @@ public partial class IslandWindow : Window
             Interval = TimeSpan.FromSeconds(1)
         };
         _mediaProgressTimer.Tick += OnMediaProgressTick;
+        _clockTimer = new System.Windows.Threading.DispatcherTimer();
+        _clockTimer.Tick += OnClockTick;
+        _timerDisplayTimer = new System.Windows.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(1)
+        };
+        _timerDisplayTimer.Tick += OnTimerDisplayTick;
         _animator.FrameTick += ApplySpringFrame;
         _winEventCallback = OnWinEvent;
 
@@ -255,6 +281,7 @@ public partial class IslandWindow : Window
     private enum IslandState
     {
         Collapsed,
+        NowBar,
         CompactLive,
         VoiceActive,
         PermissionPrompt,
@@ -265,6 +292,7 @@ public partial class IslandWindow : Window
         new Dictionary<IslandState, (double Width, double Height, double Radius)>
         {
             [IslandState.Collapsed] = (164, 36, 18),
+            [IslandState.NowBar] = (420, 40, 20),
             [IslandState.CompactLive] = (360, 56, 28),
             [IslandState.VoiceActive] = (440, 180, 28),
             [IslandState.PermissionPrompt] = (440, 180, 28),
@@ -273,9 +301,38 @@ public partial class IslandWindow : Window
 
     private IslandState _state = IslandState.Collapsed;
 
+    private void CheckReducedMotion()
+    {
+        _isReducedMotion = !SystemParameters.ClientAreaAnimation;
+    }
+
+    private void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
+    {
+        if (e.Category == UserPreferenceCategory.General || e.Category == UserPreferenceCategory.Window)
+        {
+            CheckReducedMotion();
+        }
+    }
+
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         _idleTrimTimer.Start();
+        CheckReducedMotion();
+        SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
+        TabBar.SizeChanged += (s, ev) =>
+        {
+            if (TabBar.ActualWidth > 0 && TabIndicator is not null)
+            {
+                double tabWidth = TabBar.ActualWidth / 7.0;
+                TabIndicator.Width = tabWidth;
+                _tabIndicatorSpring.Reset(_selectedTab * tabWidth);
+                if (TabIndicatorTransform is not null)
+                {
+                    TabIndicatorTransform.X = _selectedTab * tabWidth;
+                }
+            }
+        };
+
         UpdateContentForState();
         ApplyLoadout(LoadoutStore.Load());
         ClockText.Text = DateTime.Now.ToString("h:mm");
@@ -289,19 +346,28 @@ public partial class IslandWindow : Window
         UpdateSelectedTab();
         LoadAudioControls();
         UpdateDarkModeButton();
+        UpdateClockTimerState();
         _ = _mediaService.InitializeAsync();
+        _countdownTimer.Restore();
+        if (_countdownTimer.IsActive)
+        {
+            _activityCoordinator.Publish("timer-running", IslandActivityKind.TimerRunning, "Countdown", "Timer is running.");
+        }
+
+        UpdateTimerDisplayState();
+        UpdatePersistentIslandState();
         LoadWifiInfo();
         LoadBluetoothInfo();
         _scheduler = new AutonomousScheduler(_database, ExecuteScheduledActionAsync);
         _scheduler.ActionCompleted += action => Dispatcher.BeginInvoke(() =>
         {
             LoadScheduledActions();
-            ShowCompactMessage($"Scheduled: {action.Description}", Controls.SoulState.Acting);
+            ShowCompactMessage($"Scheduled: {action.Description}", Controls.SoulState.Acting, IslandActivityKind.ScheduledAction);
         });
         _scheduler.ActionFailed += (action, exception) => Dispatcher.BeginInvoke(() =>
         {
             LoadScheduledActions();
-            ShowCompactMessage($"Scheduled action failed: {exception.Message}", Controls.SoulState.Error);
+            ShowCompactMessage($"Scheduled action failed: {exception.Message}", Controls.SoulState.Error, IslandActivityKind.Error);
         });
         _scheduler.SchedulerFailed += exception => Dispatcher.BeginInvoke(() =>
             ShowCompactMessage($"Scheduler stopped: {exception.Message}", Controls.SoulState.Error));
@@ -457,7 +523,7 @@ public partial class IslandWindow : Window
             return;
         }
 
-        if (e.Delta < 0 && _state is IslandState.Collapsed or IslandState.CompactLive)
+        if (e.Delta < 0 && _state is IslandState.Collapsed or IslandState.NowBar or IslandState.CompactLive)
         {
             SetState(IslandState.ExpandedDock);
             e.Handled = true;
@@ -480,7 +546,18 @@ public partial class IslandWindow : Window
 
     private void OnIslandMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (_state is IslandState.Collapsed or IslandState.CompactLive)
+        DependencyObject? source = e.OriginalSource as DependencyObject;
+        while (source is not null)
+        {
+            if (source is Button)
+            {
+                return;
+            }
+
+            source = VisualTreeHelper.GetParent(source);
+        }
+
+        if (_state is IslandState.Collapsed or IslandState.NowBar or IslandState.CompactLive)
         {
             SetState(IslandState.ExpandedDock);
             e.Handled = true;
@@ -489,22 +566,34 @@ public partial class IslandWindow : Window
 
     private void SetState(IslandState state)
     {
+        if (state == IslandState.Collapsed && HasPersistentNowBarActivity)
+        {
+            state = IslandState.NowBar;
+        }
+        else if (state == IslandState.NowBar && !HasPersistentNowBarActivity)
+        {
+            state = IslandState.Collapsed;
+        }
+
         _state = state;
-        IslandContainer.Cursor = state == IslandState.Collapsed
+        IslandContainer.Cursor = state is IslandState.Collapsed or IslandState.NowBar
             ? System.Windows.Input.Cursors.Hand
             : System.Windows.Input.Cursors.Arrow;
         _globalInput.SetPermissionPromptActive(state == IslandState.PermissionPrompt);
-        if (state == IslandState.Collapsed)
+        if (state is IslandState.Collapsed or IslandState.NowBar)
         {
             _idleTrimTimer.Stop();
-            _idleTrimTimer.Start();
-            // Collapse Morph (ExpandedDock -> Idle): Omega = 30.0, Zeta = 0.88 (snappy, no bounce)
-            _widthSpring.Omega = 30.0;
-            _widthSpring.Zeta = 0.88;
-            _heightSpring.Omega = 30.0;
-            _heightSpring.Zeta = 0.88;
-            _cornerRadiusSpring.Omega = 30.0;
-            _cornerRadiusSpring.Zeta = 0.88;
+            if (state == IslandState.Collapsed)
+            {
+                _idleTrimTimer.Start();
+            }
+
+            _widthSpring.Omega = state == IslandState.NowBar ? 24.0 : 30.0;
+            _widthSpring.Zeta = state == IslandState.NowBar ? 0.82 : 0.88;
+            _heightSpring.Omega = state == IslandState.NowBar ? 24.0 : 30.0;
+            _heightSpring.Zeta = state == IslandState.NowBar ? 0.82 : 0.88;
+            _cornerRadiusSpring.Omega = state == IslandState.NowBar ? 24.0 : 30.0;
+            _cornerRadiusSpring.Zeta = state == IslandState.NowBar ? 0.82 : 0.88;
         }
         else
         {
@@ -519,11 +608,32 @@ public partial class IslandWindow : Window
         }
 
         (double width, double height, double radius) = StateSizes[state];
-        _widthSpring.Target = width;
-        _heightSpring.Target = height;
-        _cornerRadiusSpring.Target = radius;
-        UpdateContentForState();
-        _animator.Wake();
+        if (state == IslandState.NowBar)
+        {
+            bool hasMusic = _mediaService.CurrentTrack?.IsPlaying == true;
+            width = hasMusic ? (_countdownTimer.IsActive ? 420 : 360) : 250;
+        }
+        if (_isReducedMotion)
+        {
+            _widthSpring.Reset(width);
+            _heightSpring.Reset(height);
+            _cornerRadiusSpring.Reset(radius);
+            _expandedOpacitySpring.Reset(state == IslandState.ExpandedDock ? 1.0 : 0.0);
+            UpdateContentForState();
+            UpdateClockTimerState();
+            UpdateTimerDisplayState();
+            ApplySpringFrame();
+        }
+        else
+        {
+            _widthSpring.Target = width;
+            _heightSpring.Target = height;
+            _cornerRadiusSpring.Target = radius;
+            UpdateContentForState();
+            UpdateClockTimerState();
+            UpdateTimerDisplayState();
+            _animator.Wake();
+        }
 
         if (state == IslandState.ExpandedDock)
         {
@@ -535,6 +645,11 @@ public partial class IslandWindow : Window
 
     private void TriggerHorizontalNudge()
     {
+        if (_isReducedMotion)
+        {
+            return;
+        }
+
         var animation = new DoubleAnimationUsingKeyFrames
         {
             Duration = TimeSpan.FromMilliseconds(250)
@@ -552,6 +667,150 @@ public partial class IslandWindow : Window
     {
         _idleTrimTimer.Stop();
         TrimWorkingSet();
+    }
+
+    private void OnClockTick(object? sender, EventArgs e)
+    {
+        _clockTimer.Stop();
+        ClockText.Text = DateTime.Now.ToString("h:mm");
+        UpdateClockTimerState();
+    }
+
+    private void UpdateClockTimerState()
+    {
+        if (!IsLoaded || _state is not (IslandState.Collapsed or IslandState.NowBar))
+        {
+            _clockTimer.Stop();
+            return;
+        }
+
+        ClockText.Text = DateTime.Now.ToString("h:mm");
+        long ticksUntilNextMinute = TimeSpan.TicksPerMinute - (DateTime.Now.Ticks % TimeSpan.TicksPerMinute);
+        _clockTimer.Interval = TimeSpan.FromTicks(ticksUntilNextMinute);
+        if (!_clockTimer.IsEnabled)
+        {
+            _clockTimer.Start();
+        }
+    }
+
+    private bool HasPersistentNowBarActivity =>
+        _mediaService.CurrentTrack?.IsPlaying == true || _countdownTimer.IsActive;
+
+    private void SyncMediaActivity(MediaTrackInfo? track)
+    {
+        if (track?.IsPlaying == true)
+        {
+            string detail = string.IsNullOrWhiteSpace(track.Artist)
+                ? track.Title
+                : $"{track.Title} · {track.Artist}";
+            _activityCoordinator.Publish("media", IslandActivityKind.Media, "Now playing", detail);
+        }
+        else
+        {
+            _activityCoordinator.Clear("media");
+        }
+    }
+
+    private void UpdatePersistentIslandState()
+    {
+        if (_state is not (IslandState.Collapsed or IslandState.NowBar))
+        {
+            return;
+        }
+
+        SetState(HasPersistentNowBarActivity ? IslandState.NowBar : IslandState.Collapsed);
+    }
+
+    private void UpdateNowBarContent()
+    {
+        MediaTrackInfo? track = _mediaService.CurrentTrack;
+        bool hasMusic = track?.IsPlaying == true;
+        bool hasTimer = _countdownTimer.IsActive;
+        CollapsedSoulName.Visibility = hasMusic ? Visibility.Collapsed : Visibility.Visible;
+        CollapsedNowPlayingText.Text = hasMusic ? track!.Title : string.Empty;
+        CollapsedNowPlayingText.Visibility = hasMusic ? Visibility.Visible : Visibility.Collapsed;
+        CollapsedTimerDivider.Visibility = hasTimer ? Visibility.Visible : Visibility.Collapsed;
+        CollapsedTimerText.Visibility = hasTimer ? Visibility.Visible : Visibility.Collapsed;
+        ClockDivider.Visibility = Visibility.Visible;
+        CollapsedMusicPrevious.Visibility = hasMusic ? Visibility.Visible : Visibility.Collapsed;
+        CollapsedMusicPlayPause.Visibility = hasMusic ? Visibility.Visible : Visibility.Collapsed;
+        CollapsedMusicNext.Visibility = hasMusic ? Visibility.Visible : Visibility.Collapsed;
+        CollapsedMusicPlayPause.Content = hasMusic ? "⏸" : "▶";
+        CollapsedEqualizer.IsPlaying = hasMusic;
+        CollapsedEqualizer.Visibility = hasMusic ? Visibility.Visible : Visibility.Collapsed;
+        UpdateTimerDisplay();
+    }
+
+    private void UpdateTimerDisplayState()
+    {
+        bool timerVisible = _countdownTimer.IsActive &&
+            (_state == IslandState.NowBar || (_state == IslandState.ExpandedDock && _selectedTab == 1));
+        if (timerVisible && !_timerDisplayTimer.IsEnabled)
+        {
+            UpdateTimerDisplay();
+            _timerDisplayTimer.Start();
+        }
+        else if (!timerVisible && _timerDisplayTimer.IsEnabled)
+        {
+            _timerDisplayTimer.Stop();
+        }
+
+        UpdateNowBarContent();
+    }
+
+    private void OnTimerDisplayTick(object? sender, EventArgs e) => UpdateTimerDisplay();
+
+    private void UpdateTimerDisplay()
+    {
+        if (!_countdownTimer.IsActive)
+        {
+            TimerStatusText.Text = "No timer running";
+            TimerCancelButton.IsEnabled = false;
+            CollapsedTimerText.Text = string.Empty;
+            return;
+        }
+
+        TimeSpan remaining = _countdownTimer.Remaining;
+        string formatted = remaining.TotalHours >= 1
+            ? $"{(int)remaining.TotalHours}:{remaining.Minutes:00}:{remaining.Seconds:00}"
+            : $"{(int)remaining.TotalMinutes}:{remaining.Seconds:00}";
+        TimerStatusText.Text = $"Ends in {formatted}";
+        TimerCancelButton.IsEnabled = true;
+        CollapsedTimerText.Text = formatted;
+    }
+
+    private void OnCountdownTimerCompleted()
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            _activityCoordinator.Clear("timer-running");
+            UpdateTimerDisplayState();
+            ShowCompactMessage("Countdown complete", Controls.SoulState.Acting, IslandActivityKind.TimerComplete);
+            SafeDiagnostics.WriteEvent("timer", "completion-shown");
+        });
+    }
+
+    private void OnTimerStartClick(object sender, RoutedEventArgs e)
+    {
+        if (!int.TryParse(TimerMinutesInput.Text, out int minutes) || minutes is < 1 or > 1440)
+        {
+            TimerStatusText.Text = "Enter 1 to 1440 minutes.";
+            return;
+        }
+
+        _countdownTimer.Start(TimeSpan.FromMinutes(minutes));
+        _activityCoordinator.Publish("timer-running", IslandActivityKind.TimerRunning, "Countdown", "Timer is running.");
+        SafeDiagnostics.WriteMetric("timer", "duration-seconds", (long)TimeSpan.FromMinutes(minutes).TotalSeconds);
+        UpdateTimerDisplayState();
+        UpdatePersistentIslandState();
+    }
+
+    private void OnTimerCancelClick(object sender, RoutedEventArgs e)
+    {
+        _countdownTimer.Cancel();
+        _activityCoordinator.Clear("timer-running");
+        UpdateTimerDisplayState();
+        UpdatePersistentIslandState();
     }
 
     private void TrimWorkingSet()
@@ -575,10 +834,16 @@ public partial class IslandWindow : Window
 
     private void UpdateContentForState()
     {
-        CollapsedContent.Visibility = _state == IslandState.Collapsed
+        CollapsedContent.Visibility = _state is IslandState.Collapsed or IslandState.NowBar
             ? Visibility.Visible : Visibility.Collapsed;
         CompactContent.Visibility = _state is IslandState.CompactLive or IslandState.VoiceActive
             ? Visibility.Visible : Visibility.Collapsed;
+        VoiceStopButton.Visibility = _state == IslandState.VoiceActive &&
+            (_geminiLive is not null || _voiceSessionStarting)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        UpdateVoiceControls();
+        UpdateNowBarContent();
         PermissionPromptContent.Visibility = _state == IslandState.PermissionPrompt
             ? Visibility.Visible : Visibility.Collapsed;
 
@@ -604,6 +869,10 @@ public partial class IslandWindow : Window
         IslandContainer.CornerRadius = new CornerRadius(Math.Min(_cornerRadiusSpring.Current, _heightSpring.Current / 2));
         ExpandedContent.Opacity = _expandedOpacitySpring.Current;
         ExpandedSlideTransform.Y = (1.0 - _expandedOpacitySpring.Current) * 10.0;
+        if (TabIndicatorTransform is not null)
+        {
+            TabIndicatorTransform.X = _tabIndicatorSpring.Current;
+        }
         if (_state != IslandState.ExpandedDock && _expandedOpacitySpring.Current <= 0.02)
         {
             ExpandedContent.Visibility = Visibility.Collapsed;
@@ -634,6 +903,9 @@ public partial class IslandWindow : Window
 
     private void UpdateSelectedTab()
     {
+        int direction = _selectedTab >= _previousTab ? 1 : -1;
+        _previousTab = _selectedTab;
+
         TabScroller.Visibility = _selectedTab == 0 ? Visibility.Visible : Visibility.Collapsed;
         PageToday.Visibility = _selectedTab == 1 ? Visibility.Visible : Visibility.Collapsed;
         PageStats.Visibility = _selectedTab == 2 ? Visibility.Visible : Visibility.Collapsed;
@@ -641,6 +913,29 @@ public partial class IslandWindow : Window
         PageApps.Visibility = _selectedTab == 4 ? Visibility.Visible : Visibility.Collapsed;
         PageWallpaper.Visibility = _selectedTab == 5 ? Visibility.Visible : Visibility.Collapsed;
         PagePower.Visibility = _selectedTab == 6 ? Visibility.Visible : Visibility.Collapsed;
+        UpdateTimerDisplayState();
+
+        if (!_isReducedMotion && TabContentSlideTransform is not null && TabContent is not null)
+        {
+            TabContentSlideTransform.X = direction * 4.0;
+            var slideAnim = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(120))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            TabContentSlideTransform.BeginAnimation(TranslateTransform.XProperty, slideAnim);
+
+            TabContent.Opacity = 0.0;
+            var fadeAnim = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(120));
+            TabContent.BeginAnimation(UIElement.OpacityProperty, fadeAnim);
+        }
+        else if (TabContent is not null)
+        {
+            TabContent.Opacity = 1.0;
+            if (TabContentSlideTransform is not null)
+            {
+                TabContentSlideTransform.X = 0;
+            }
+        }
 
         if (_selectedTab == 0)
         {
@@ -672,23 +967,43 @@ public partial class IslandWindow : Window
 
         UpdateMediaProgressTimerState();
 
-        if (TabBar is not null)
+        if (TabBar is not null && TabIndicator is not null)
         {
+            double tabWidth = TabBar.ActualWidth > 0 ? TabBar.ActualWidth / 7.0 : 88.0;
+            TabIndicator.Width = tabWidth;
+            if (_isReducedMotion)
+            {
+                _tabIndicatorSpring.Reset(_selectedTab * tabWidth);
+                if (TabIndicatorTransform is not null)
+                {
+                    TabIndicatorTransform.X = _selectedTab * tabWidth;
+                }
+            }
+            else
+            {
+                _tabIndicatorSpring.Target = _selectedTab * tabWidth;
+                _animator.Wake();
+            }
+
+            TabLabel0.Visibility = _selectedTab == 0 ? Visibility.Visible : Visibility.Collapsed;
+            TabLabel1.Visibility = _selectedTab == 1 ? Visibility.Visible : Visibility.Collapsed;
+            TabLabel2.Visibility = _selectedTab == 2 ? Visibility.Visible : Visibility.Collapsed;
+            TabLabel3.Visibility = _selectedTab == 3 ? Visibility.Visible : Visibility.Collapsed;
+            TabLabel4.Visibility = _selectedTab == 4 ? Visibility.Visible : Visibility.Collapsed;
+            TabLabel5.Visibility = _selectedTab == 5 ? Visibility.Visible : Visibility.Collapsed;
+            TabLabel6.Visibility = _selectedTab == 6 ? Visibility.Visible : Visibility.Collapsed;
+
             for (int i = 0; i < TabBar.Children.Count; i++)
             {
                 if (TabBar.Children[i] is Button tabBtn)
                 {
                     bool isSelected = i == _selectedTab;
-                    tabBtn.Background = isSelected
-                        ? (System.Windows.Media.Brush)FindResource("TabPillActiveBrush")
-                        : System.Windows.Media.Brushes.Transparent;
-                    tabBtn.BorderBrush = isSelected
-                        ? (System.Windows.Media.Brush)FindResource("AccentBorderBrush")
-                        : System.Windows.Media.Brushes.Transparent;
-                    tabBtn.BorderThickness = isSelected ? new Thickness(1) : new Thickness(0);
+                    tabBtn.Background = System.Windows.Media.Brushes.Transparent;
+                    tabBtn.BorderBrush = System.Windows.Media.Brushes.Transparent;
+                    tabBtn.BorderThickness = new Thickness(0);
                     tabBtn.Foreground = isSelected
-                        ? (System.Windows.Media.Brush)FindResource("AccentBrush")
-                        : (System.Windows.Media.Brush)FindResource("TextSecondaryBrush");
+                        ? (System.Windows.Media.Brush)FindResource("Text1Brush")
+                        : (System.Windows.Media.Brush)FindResource("Text2Brush");
                     tabBtn.FontWeight = isSelected ? FontWeights.SemiBold : FontWeights.Normal;
                 }
             }
@@ -741,7 +1056,40 @@ public partial class IslandWindow : Window
             return;
         }
 
-        ToggleDock();
+        await StartLiveVoiceSessionAsync();
+    }
+
+    private async void OnTalkClick(object sender, RoutedEventArgs e)
+    {
+        if (_geminiLive is not null || _voiceSessionStarting)
+        {
+            await StopLiveVoiceSessionAsync();
+            ShowCompactMessage("Voice session ended", Controls.SoulState.Idle);
+            return;
+        }
+
+        await StartLiveVoiceSessionAsync();
+    }
+
+    private async void OnVoiceStopClick(object sender, RoutedEventArgs e)
+    {
+        await StopLiveVoiceSessionAsync();
+        ShowCompactMessage("Voice session ended", Controls.SoulState.Idle);
+    }
+
+    private void UpdateVoiceControls()
+    {
+        TalkButton.Content = _voiceSessionStarting ? "Cancel" : _geminiLive is not null ? "End" : "Talk";
+        TalkButton.ToolTip = _voiceSessionStarting
+            ? "Cancel the live voice connection"
+            : _geminiLive is not null
+                ? "End the live voice conversation"
+                : "Start a live voice conversation with Void";
+        VoiceStopButton.Content = _voiceSessionStarting ? "Cancel" : "End";
+        VoiceStopButton.Visibility = _state == IslandState.VoiceActive &&
+            (_geminiLive is not null || _voiceSessionStarting)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
     }
 
     public void ToggleDock() =>
@@ -757,6 +1105,7 @@ public partial class IslandWindow : Window
         {
             _systemControls.DuckAudio();
             _dictation.Start();
+            _activityCoordinator.Publish("dictation", IslandActivityKind.Dictation, "Dictation", "Listening for dictation.");
             CompactTitle.Text = "Dictation";
             CompactSubtitle.Text = "Listening for dictation...";
             CompactSoul.SoulState = Controls.SoulState.Listening;
@@ -764,6 +1113,7 @@ public partial class IslandWindow : Window
         }
         catch (Exception exception)
         {
+            _activityCoordinator.Clear("dictation");
             ShowCompactMessage($"Dictation unavailable: {exception.Message}", Controls.SoulState.Error);
         }
     }
@@ -775,12 +1125,14 @@ public partial class IslandWindow : Window
             _systemControls.DuckAudio();
             CompactTitle.Text = "Circle to Ask";
             CompactSubtitle.Text = "Circle anything and ask out loud...";
+            _activityCoordinator.Publish("circle-to-ask", IslandActivityKind.CircleToAsk, "Circle to Ask", "Select a screen region and ask out loud.");
             CompactSoul.SoulState = Controls.SoulState.Listening;
             SetState(IslandState.VoiceActive);
             _circleOverlay.BeginCapture();
         }
         catch (Exception exception)
         {
+            _activityCoordinator.Clear("circle-to-ask");
             ShowCompactMessage($"Circle to Ask unavailable: {exception.Message}", Controls.SoulState.Error);
         }
     }
@@ -790,9 +1142,11 @@ public partial class IslandWindow : Window
         _systemControls.UnduckAudio();
         if (!_circleOverlay.IsCapturing)
         {
+            _activityCoordinator.Clear("circle-to-ask");
             return;
         }
 
+        _activityCoordinator.Clear("circle-to-ask");
         CompactSubtitle.Text = "Analyzing the selected screen region...";
         CompactSoul.SoulState = Controls.SoulState.Thinking;
         try
@@ -813,20 +1167,33 @@ public partial class IslandWindow : Window
         }
         catch (Exception exception)
         {
+            _activityCoordinator.Clear("circle-to-ask");
             ShowCompactMessage($"Circle to Ask failed: {exception.Message}", Controls.SoulState.Error);
         }
     }
 
     private async Task StartLiveVoiceSessionAsync(byte[]? initialImage = null, byte[]? initialAudio = null)
     {
+        if (_geminiLive is not null || _voiceSessionStarting)
+        {
+            return;
+        }
+
         string? apiKey = SecretStore.LoadApiKey();
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            ShowCompactMessage("Add a Gemini API key in Shape Hitodama.", Controls.SoulState.Error);
+            ShowCompactMessage("Add a Gemini API key in Shape Void.", Controls.SoulState.Error);
             return;
         }
 
         _voiceSessionStarting = true;
+        _liveVoiceFailureReported = false;
+        _activityCoordinator.Publish(
+            "voice-session",
+            initialImage is null ? IslandActivityKind.Voice : IslandActivityKind.CircleToAsk,
+            initialImage is null ? "Live conversation" : "Circle to Ask",
+            "Listening to the user.");
+        UpdateVoiceControls();
         var cancellation = new CancellationTokenSource();
         _voiceSessionCancellation = cancellation;
         _liveAudioPlayer = new AudioPlayerService();
@@ -841,26 +1208,60 @@ public partial class IslandWindow : Window
         AudioPlayerService audioPlayer = _liveAudioPlayer;
 
         microphone.PcmChunkAvailable += liveSession.SendAudioChunk;
-        microphone.AudioLevelChanged += level => CompactSoul.AudioLevel = level;
-        liveSession.TranscriptReceived += transcript => Dispatcher.BeginInvoke(() =>
+        microphone.AudioStreamEnded += liveSession.EndAudioStream;
+        microphone.AudioLevelChanged += level => Dispatcher.BeginInvoke(() => CompactSoul.AudioLevel = level);
+        liveSession.InputTranscriptReceived += transcript => Dispatcher.BeginInvoke(() =>
         {
-            CompactTitle.Text = "Hitodama";
+            if (!ReferenceEquals(_geminiLive, liveSession))
+            {
+                return;
+            }
+
+            CompactTitle.Text = "You said";
+            CompactSubtitle.Text = transcript;
+        });
+        liveSession.OutputTranscriptReceived += transcript => Dispatcher.BeginInvoke(() =>
+        {
+            if (!ReferenceEquals(_geminiLive, liveSession))
+            {
+                return;
+            }
+
+            CompactTitle.Text = string.IsNullOrWhiteSpace(_loadout.SoulName) ? "Void" : _loadout.SoulName;
             CompactSubtitle.Text = transcript;
         });
         liveSession.SpeakingChanged += speaking => Dispatcher.BeginInvoke(() =>
         {
+            if (!ReferenceEquals(_geminiLive, liveSession))
+            {
+                return;
+            }
+
             CompactSoul.SoulState = speaking ? Controls.SoulState.Speaking : Controls.SoulState.Listening;
         });
         liveSession.Interrupted += () => Dispatcher.BeginInvoke(() =>
         {
+            if (!ReferenceEquals(_geminiLive, liveSession))
+            {
+                return;
+            }
+
             CompactSoul.SoulState = Controls.SoulState.Listening;
             CompactSubtitle.Text = "Listening...";
         });
         liveSession.ConnectionFailed += exception => Dispatcher.BeginInvoke(() =>
-            ShowCompactMessage($"Voice connection failed: {exception.Message}", Controls.SoulState.Error));
-        liveSession.SessionEnded += OnLiveSessionEnded;
+        {
+            if (!ReferenceEquals(_geminiLive, liveSession))
+            {
+                return;
+            }
 
-        CompactTitle.Text = "Hitodama";
+            _liveVoiceFailureReported = true;
+            ShowCompactMessage($"Voice connection failed: {exception.Message}", Controls.SoulState.Error);
+        });
+        liveSession.SessionEnded += () => OnLiveSessionEnded(liveSession);
+
+        CompactTitle.Text = "Void";
         CompactSubtitle.Text = "Connecting to Gemini Live...";
         CompactSoul.SoulState = Controls.SoulState.Thinking;
         SetState(IslandState.VoiceActive);
@@ -873,8 +1274,11 @@ public partial class IslandWindow : Window
                 await liveSession.SendScreenQuestionAsync(initialImage, initialAudio ?? [], cancellation.Token);
             }
 
-            microphone.StartRecording(retainAudio: false);
-            CompactSubtitle.Text = "Listening... Ctrl + Alt + Space to stop";
+            microphone.StartRecording(retainAudio: false, streamContinuously: true);
+            CompactTitle.Text = "Live conversation";
+            CompactSubtitle.Text = audioPlayer.IsOutputAvailable
+                ? "Listening… Say something or click End"
+                : "Listening… speaker output is unavailable on this device";
             CompactSoul.SoulState = Controls.SoulState.Listening;
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
@@ -889,6 +1293,7 @@ public partial class IslandWindow : Window
         finally
         {
             _voiceSessionStarting = false;
+            UpdateVoiceControls();
             if (ReferenceEquals(_voiceSessionCancellation, cancellation))
             {
                 _voiceSessionCancellation = null;
@@ -897,23 +1302,30 @@ public partial class IslandWindow : Window
         }
     }
 
-    private void OnLiveSessionEnded()
+    private void OnLiveSessionEnded(GeminiLiveService endedSession)
     {
         Dispatcher.BeginInvoke(new Action(async () =>
         {
-            if (_geminiLive is null)
+            if (!ReferenceEquals(_geminiLive, endedSession))
             {
                 return;
             }
 
+            bool wasStarting = _voiceSessionStarting;
+            bool failureWasReported = _liveVoiceFailureReported;
             await StopLiveVoiceSessionAsync();
-            ShowCompactMessage("Voice session ended", Controls.SoulState.Idle);
+            _liveVoiceFailureReported = false;
+            if (!wasStarting && !failureWasReported)
+            {
+                ShowCompactMessage("Voice session ended", Controls.SoulState.Idle);
+            }
         }));
     }
 
     private async Task StopLiveVoiceSessionAsync()
     {
         _voiceSessionCancellation?.Cancel();
+        _activityCoordinator.Clear("voice-session");
         MicCaptureService? microphone = _liveMicrophone;
         GeminiLiveService? liveSession = _geminiLive;
         AudioPlayerService? audioPlayer = _liveAudioPlayer;
@@ -938,6 +1350,7 @@ public partial class IslandWindow : Window
 
         audioPlayer?.Dispose();
         CompactSoul.SoulState = Controls.SoulState.Idle;
+        UpdateVoiceControls();
     }
 
     private async void OnDictationReleased()
@@ -945,6 +1358,7 @@ public partial class IslandWindow : Window
         _systemControls.UnduckAudio();
         if (!_dictation.IsRecording)
         {
+            _activityCoordinator.Clear("dictation");
             return;
         }
 
@@ -975,6 +1389,10 @@ public partial class IslandWindow : Window
         {
             ShowCompactMessage($"Dictation failed: {exception.Message}", Controls.SoulState.Error);
         }
+        finally
+        {
+            _activityCoordinator.Clear("dictation");
+        }
     }
 
     private async void OnKillSwitchPressed()
@@ -992,6 +1410,8 @@ public partial class IslandWindow : Window
 
             await _circleOverlay.CancelCaptureAsync();
             await _dictation.CancelAsync();
+            _activityCoordinator.Clear("circle-to-ask");
+            _activityCoordinator.Clear("dictation");
             SetState(IslandState.Collapsed);
         }
         catch (Exception exception)
@@ -1000,18 +1420,94 @@ public partial class IslandWindow : Window
         }
     }
 
-    private void ShowCompactMessage(string message, Controls.SoulState soulState)
+    private void ShowCompactMessage(
+        string message,
+        Controls.SoulState soulState,
+        IslandActivityKind? activityKind = null)
     {
-        if (soulState == Controls.SoulState.Error)
+        IslandActivityKind kind = activityKind ?? (soulState == Controls.SoulState.Error
+            ? IslandActivityKind.Error
+            : IslandActivityKind.Notification);
+        TimeSpan lifetime = kind == IslandActivityKind.Error
+            ? TimeSpan.FromSeconds(4)
+            : TimeSpan.FromMilliseconds(1500);
+        string id = $"compact-message-{Interlocked.Increment(ref _activitySequence)}";
+        _activityCoordinator.Publish(id, kind, "Void", message, lifetime);
+    }
+
+    private void OnCurrentActivityChanged(IslandActivity? activity)
+    {
+        Dispatcher.BeginInvoke(new Action(() => ApplyCurrentActivity(_activityCoordinator.Current)));
+    }
+
+    private void ApplyCurrentActivity(IslandActivity? activity)
+    {
+        if (activity is null)
+        {
+            LeaveTransientActivity();
+            return;
+        }
+
+        if (activity.Kind is IslandActivityKind.Gatekeeper or IslandActivityKind.Voice or
+            IslandActivityKind.CircleToAsk or IslandActivityKind.Dictation)
+        {
+            if (activity.Kind is IslandActivityKind.Voice or IslandActivityKind.CircleToAsk &&
+                _state == IslandState.CompactLive && (_geminiLive is not null || _voiceSessionStarting))
+            {
+                SetState(IslandState.VoiceActive);
+            }
+
+            if (activity.Kind == IslandActivityKind.Dictation && _state == IslandState.CompactLive && _dictation.IsRecording)
+            {
+                _displayedTransientActivityId = null;
+            }
+
+            return;
+        }
+
+        if (!activity.Id.StartsWith("compact-message-", StringComparison.Ordinal))
+        {
+            LeaveTransientActivity();
+            return;
+        }
+
+        if (activity.ExpiresAtUtc is DateTimeOffset expiry && expiry <= DateTimeOffset.UtcNow)
+        {
+            LeaveTransientActivity();
+            return;
+        }
+
+        _displayedTransientActivityId = activity.Id;
+        CompactTitle.Text = activity.Title;
+        CompactSubtitle.Text = activity.Detail;
+        CompactSoul.SoulState = activity.Kind == IslandActivityKind.Error
+            ? Controls.SoulState.Error
+            : activity.Kind is IslandActivityKind.ScheduledAction or IslandActivityKind.TimerComplete or IslandActivityKind.Clipboard
+                ? Controls.SoulState.Acting
+                : Controls.SoulState.Idle;
+        CompactCheckmarkBadge.Visibility = Visibility.Collapsed;
+        CompactSoul.Visibility = Visibility.Visible;
+        if (activity.Kind == IslandActivityKind.Error)
         {
             TriggerHorizontalNudge();
         }
 
-        CompactTitle.Text = "Hitodama";
-        CompactSubtitle.Text = message;
-        CompactSoul.SoulState = soulState;
         SetState(IslandState.CompactLive);
-        StartCollapseTimer(TimeSpan.FromMilliseconds(1500), IslandState.CompactLive);
+    }
+
+    private void LeaveTransientActivity()
+    {
+        if (_displayedTransientActivityId is null)
+        {
+            return;
+        }
+
+        _displayedTransientActivityId = null;
+        if (_state == IslandState.CompactLive)
+        {
+            CompactSoul.SoulState = Controls.SoulState.Idle;
+            SetState(IslandState.Collapsed);
+        }
     }
 
     private void StartCollapseTimer(TimeSpan interval, IslandState expectedState, Action? onCollapse = null)
@@ -1547,19 +2043,13 @@ public partial class IslandWindow : Window
 
             LoadClipboardEntries();
             ClipboardPreview.Text = "Copied to Clipboard";
-            if (_state == IslandState.Collapsed)
+            if (_state is IslandState.Collapsed or IslandState.NowBar)
             {
-                CompactTitle.Text = "Copied to Clipboard";
                 string snippet = _clipboardEntries.Count > 0 ? _clipboardEntries[0].PreviewText : "Content copied";
-                CompactSubtitle.Text = snippet.Length > 45 ? snippet[..45] + "…" : snippet;
-                CompactCheckmarkBadge.Visibility = Visibility.Visible;
-                CompactSoul.Visibility = Visibility.Collapsed;
-                SetState(IslandState.CompactLive);
-                StartCollapseTimer(TimeSpan.FromMilliseconds(1200), IslandState.CompactLive, () =>
-                {
-                    CompactCheckmarkBadge.Visibility = Visibility.Collapsed;
-                    CompactSoul.Visibility = Visibility.Visible;
-                });
+                ShowCompactMessage(
+                    $"Copied · {(snippet.Length > 45 ? snippet[..45] + "…" : snippet)}",
+                    Controls.SoulState.Acting,
+                    IslandActivityKind.Clipboard);
             }
         }
         catch (Exception exception) when (exception is System.Runtime.InteropServices.ExternalException or
@@ -1591,6 +2081,37 @@ public partial class IslandWindow : Window
     {
         _clipboardEntries = _database.GetClipboardEntries();
         ClipboardHistoryList.ItemsSource = _clipboardEntries;
+    }
+
+    private void OnClipboardPinClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: long id } ||
+            _clipboardEntries.FirstOrDefault(entry => entry.Id == id) is not ClipEntry entry)
+        {
+            return;
+        }
+
+        bool isPinned = !entry.IsPinned;
+        if (!_database.SetClipboardEntryPinned(id, isPinned))
+        {
+            return;
+        }
+
+        LoadClipboardEntries();
+        ClipboardPreview.Text = isPinned
+            ? "Pinned. This copy stays until you unpin or delete it."
+            : "Unpinned. It now counts as a recent copy.";
+    }
+
+    private void OnClipboardDeleteClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: long id } || !_database.DeleteClipboardEntry(id))
+        {
+            return;
+        }
+
+        LoadClipboardEntries();
+        ClipboardPreview.Text = "Clipboard item deleted.";
     }
 
     private void OnClipboardItemClick(object sender, RoutedEventArgs e)
@@ -1722,7 +2243,7 @@ public partial class IslandWindow : Window
 
     private void RunPowerCommand(string confirmation, string command)
     {
-        if (MessageBox.Show(confirmation, "Hitodama", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+        if (MessageBox.Show(confirmation, "Void", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
         {
             return;
         }
@@ -1864,6 +2385,7 @@ public partial class IslandWindow : Window
                 MusicArtistText.Text = string.IsNullOrWhiteSpace(track.Artist) ? "Playing" : track.Artist;
                 MusicPlayPauseButton.Content = track.IsPlaying ? "⏸" : "▶";
                 var artwork = LoadMediaArtwork(track.ThumbnailBytes);
+                ApplyAlbumPalette(track);
                 MusicAlbumArt.Source = artwork;
                 MusicAlbumArtPlaceholder.Visibility = artwork is not null ? Visibility.Collapsed : Visibility.Visible;
                 ControlsEqualizer.IsPlaying = track.IsPlaying;
@@ -1874,8 +2396,9 @@ public partial class IslandWindow : Window
                 MusicTimelineText.Text = $"{FormatMediaTime(currentPos)} / {FormatMediaTime(track.Duration)}";
                 CollapsedEqualizer.IsPlaying = track.IsPlaying;
                 CollapsedEqualizer.Visibility = track.IsPlaying ? Visibility.Visible : Visibility.Collapsed;
+                CollapsedSoulName.Visibility = track.IsPlaying ? Visibility.Collapsed : Visibility.Visible;
                 ClockDivider.Visibility = track.IsPlaying ? Visibility.Collapsed : Visibility.Visible;
-                ClockText.Visibility = track.IsPlaying ? Visibility.Collapsed : Visibility.Visible;
+                ClockText.Visibility = Visibility.Visible;
                 MusicIslandCard.BorderBrush = track.IsPlaying
                     ? (System.Windows.Media.Brush)FindResource("AccentBorderBrush")
                     : (System.Windows.Media.Brush)FindResource("GlassCardBorderBrush");
@@ -1886,6 +2409,8 @@ public partial class IslandWindow : Window
                 MusicTitleText.Text = "No media playing";
                 MusicArtistText.Text = "Spotify · Apple Music · Browser";
                 MusicAlbumArt.Source = null;
+                _albumPaletteKey = null;
+                SetAlbumPalette(false, _albumPrimaryColor, _albumSecondaryColor);
                 MusicAlbumArtPlaceholder.Visibility = Visibility.Visible;
                 MusicPlayPauseButton.Content = "▶";
                 ControlsEqualizer.IsPlaying = false;
@@ -1893,12 +2418,16 @@ public partial class IslandWindow : Window
                 MusicTimelineText.Text = "--:-- / --:--";
                 CollapsedEqualizer.IsPlaying = false;
                 CollapsedEqualizer.Visibility = Visibility.Collapsed;
+                CollapsedSoulName.Visibility = Visibility.Visible;
                 ClockDivider.Visibility = Visibility.Visible;
                 ClockText.Visibility = Visibility.Visible;
                 MusicIslandCard.BorderBrush = (System.Windows.Media.Brush)FindResource("GlassCardBorderBrush");
             }
 
             UpdateMediaProgressTimerState();
+            UpdateNowBarContent();
+            UpdatePersistentIslandState();
+            SyncMediaActivity(_mediaService.CurrentTrack);
         });
     }
 
@@ -1913,10 +2442,123 @@ public partial class IslandWindow : Window
         var image = new BitmapImage();
         image.BeginInit();
         image.CacheOption = BitmapCacheOption.OnLoad;
+        image.DecodePixelWidth = 320;
         image.StreamSource = stream;
         image.EndInit();
         image.Freeze();
         return image;
+    }
+
+    private void ApplyAlbumPalette(MediaTrackInfo track)
+    {
+        byte[]? bytes = track.ThumbnailBytes;
+        if (bytes is null || bytes.Length == 0)
+        {
+            _albumPaletteKey = null;
+            SetAlbumPalette(false, _albumPrimaryColor, _albumSecondaryColor);
+            return;
+        }
+
+        string key = $"{track.AlbumTitle}\u001f{track.Artist}";
+        if (!string.Equals(key, _albumPaletteKey, StringComparison.Ordinal) ||
+            !ControlsEqualizer.HasAlbumPalette)
+        {
+            _albumPaletteKey = key;
+            if (TryExtractAlbumPalette(bytes, out Color primary, out Color secondary))
+            {
+                _albumPrimaryColor = primary;
+                _albumSecondaryColor = secondary;
+                SetAlbumPalette(true, primary, secondary);
+                return;
+            }
+
+            SetAlbumPalette(false, _albumPrimaryColor, _albumSecondaryColor);
+            return;
+        }
+
+        SetAlbumPalette(true, _albumPrimaryColor, _albumSecondaryColor);
+    }
+
+    private void SetAlbumPalette(bool enabled, Color primary, Color secondary)
+    {
+        ControlsEqualizer.AlbumPrimaryColor = primary;
+        ControlsEqualizer.AlbumSecondaryColor = secondary;
+        ControlsEqualizer.HasAlbumPalette = enabled;
+        CollapsedEqualizer.AlbumPrimaryColor = primary;
+        CollapsedEqualizer.AlbumSecondaryColor = secondary;
+        CollapsedEqualizer.HasAlbumPalette = enabled;
+    }
+
+    private static bool TryExtractAlbumPalette(byte[] bytes, out Color primary, out Color secondary)
+    {
+        primary = Color.FromRgb(56, 189, 248);
+        secondary = Color.FromRgb(129, 140, 248);
+        try
+        {
+            using var stream = new MemoryStream(bytes, writable: false);
+            var image = new BitmapImage();
+            image.BeginInit();
+            image.CacheOption = BitmapCacheOption.OnLoad;
+            image.DecodePixelWidth = 32;
+            image.StreamSource = stream;
+            image.EndInit();
+            var pixels = new FormatConvertedBitmap(image, PixelFormats.Bgra32, null, 0);
+            int width = pixels.PixelWidth;
+            int height = pixels.PixelHeight;
+            if (width == 0 || height == 0 || width > 64 || height > 64)
+            {
+                return false;
+            }
+
+            byte[] buffer = new byte[width * height * 4];
+            pixels.CopyPixels(buffer, width * 4, 0);
+            var histogram = new Dictionary<int, int>();
+            for (int index = 0; index < buffer.Length; index += 4)
+            {
+                if (buffer[index + 3] < 200)
+                {
+                    continue;
+                }
+
+                int blue = buffer[index];
+                int green = buffer[index + 1];
+                int red = buffer[index + 2];
+                int maximum = Math.Max(red, Math.Max(green, blue));
+                int minimum = Math.Min(red, Math.Min(green, blue));
+                double saturation = maximum == 0 ? 0 : (maximum - minimum) / (double)maximum;
+                if (maximum < 36 || maximum > 250 || saturation < 0.16)
+                {
+                    continue;
+                }
+
+                int key = ((red >> 4) << 8) | ((green >> 4) << 4) | (blue >> 4);
+                histogram[key] = histogram.GetValueOrDefault(key) + 1 + (int)(saturation * 3);
+            }
+
+            int[] selected = histogram.OrderByDescending(entry => entry.Value).Take(2).Select(entry => entry.Key).ToArray();
+            if (selected.Length == 0)
+            {
+                return false;
+            }
+
+            primary = LiftPaletteColor(selected[0]);
+            secondary = selected.Length > 1
+                ? LiftPaletteColor(selected[1])
+                : Color.FromRgb(primary.B, primary.R, primary.G);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static Color LiftPaletteColor(int key)
+    {
+        byte red = (byte)Math.Min(255, (((key >> 8) & 0xF) * 17 * 3 / 4) + 64);
+        byte green = (byte)Math.Min(255, (((key >> 4) & 0xF) * 17 * 3 / 4) + 64);
+        byte blue = (byte)Math.Min(255, ((key & 0xF) * 17 * 3 / 4) + 64);
+        return Color.FromRgb(red, green, blue);
     }
 
     private static string FormatMediaTime(TimeSpan time) =>
@@ -1930,12 +2572,16 @@ public partial class IslandWindow : Window
             ControlsEqualizer.IsPlaying = isPlaying;
             CollapsedEqualizer.IsPlaying = isPlaying;
             CollapsedEqualizer.Visibility = isPlaying ? Visibility.Visible : Visibility.Collapsed;
+            CollapsedSoulName.Visibility = isPlaying ? Visibility.Collapsed : Visibility.Visible;
             ClockDivider.Visibility = isPlaying ? Visibility.Collapsed : Visibility.Visible;
-            ClockText.Visibility = isPlaying ? Visibility.Collapsed : Visibility.Visible;
+            ClockText.Visibility = Visibility.Visible;
             MusicIslandCard.BorderBrush = isPlaying
                 ? (System.Windows.Media.Brush)FindResource("AccentBorderBrush")
                 : (System.Windows.Media.Brush)FindResource("GlassCardBorderBrush");
             UpdateMediaProgressTimerState();
+            UpdateNowBarContent();
+            UpdatePersistentIslandState();
+            SyncMediaActivity(_mediaService.CurrentTrack);
         });
     }
 
@@ -1972,6 +2618,11 @@ public partial class IslandWindow : Window
                 ? Visibility.Visible : Visibility.Collapsed;
             PermissionSoul.SoulState = Controls.SoulState.Thinking;
 
+            _activityCoordinator.Publish(
+                "gatekeeper",
+                IslandActivityKind.Gatekeeper,
+                "Security confirmation required",
+                $"{tool.Name}: {tool.Description}");
             SetState(IslandState.PermissionPrompt);
         });
 
@@ -1980,14 +2631,20 @@ public partial class IslandWindow : Window
 
     private void OnPermissionAllowClick(object sender, RoutedEventArgs e)
     {
-        _permissionTcs?.TrySetResult(true);
+        TaskCompletionSource<bool>? permission = _permissionTcs;
+        _permissionTcs = null;
+        _activityCoordinator.Clear("gatekeeper");
+        permission?.TrySetResult(true);
         SetState(IslandState.Collapsed);
     }
 
     private void OnPermissionDenyClick(object sender, RoutedEventArgs e)
     {
         TriggerHorizontalNudge();
-        _permissionTcs?.TrySetResult(false);
+        TaskCompletionSource<bool>? permission = _permissionTcs;
+        _permissionTcs = null;
+        _activityCoordinator.Clear("gatekeeper");
+        permission?.TrySetResult(false);
         SetState(IslandState.Collapsed);
     }
 
@@ -2159,9 +2816,14 @@ public partial class IslandWindow : Window
     private async void OnClosed(object? sender, EventArgs e)
     {
         SystemEvents.DisplaySettingsChanged -= OnDisplayChanged;
+        SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
         _idleTrimTimer.Stop();
         _mediaProgressTimer.Stop();
+        _clockTimer.Stop();
+        _timerDisplayTimer.Stop();
         _mediaProgressTimer.Tick -= OnMediaProgressTick;
+        _clockTimer.Tick -= OnClockTick;
+        _timerDisplayTimer.Tick -= OnTimerDisplayTick;
         if (_windowHandle != IntPtr.Zero)
         {
             RemoveClipboardFormatListener(_windowHandle);
@@ -2176,6 +2838,8 @@ public partial class IslandWindow : Window
         _circleOverlay.Dispose();
         _permissionTcs?.TrySetResult(false);
         _gatekeeper.Dispose();
+        _countdownTimer.Completed -= OnCountdownTimerCompleted;
+        _countdownTimer.Dispose();
         await _mediaService.DisposeAsync();
         _toolExecution.Dispose();
 

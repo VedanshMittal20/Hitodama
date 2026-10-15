@@ -150,3 +150,13 @@ public sealed class ClipTypeFgConverter : IValueConverter
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         DependencyProperty.UnsetValue;
 }
+
+[ValueConversion(typeof(bool), typeof(string))]
+public sealed class ClipboardPinTextConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value is true ? "Unpin" : "Pin";
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        DependencyProperty.UnsetValue;
+}

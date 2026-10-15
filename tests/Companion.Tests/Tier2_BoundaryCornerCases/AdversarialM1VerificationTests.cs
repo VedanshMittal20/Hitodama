@@ -203,7 +203,7 @@ public sealed class AdversarialM1VerificationTests
         await using var client = new CompanionIpcClient(pipeName);
         await client.ConnectAsync(TimeSpan.FromSeconds(3));
 
-        string unicodeText = "Hitodama - 人魂 霊魂 🌟 テスト";
+        string unicodeText = "Void - 人魂 霊魂 🌟 テスト";
         var resp = await client.SendRequestAsync("echo", new { text = unicodeText }, TimeSpan.FromSeconds(3));
 
         resp.IsSuccess.Should().BeTrue();
@@ -216,7 +216,7 @@ public sealed class AdversarialM1VerificationTests
     {
         var framer = new NewlineIpcFramer();
         using var ms = new MemoryStream();
-        string originalText = "{\"text\": \"人魂 - Hitodama\"}";
+        string originalText = "{\"text\": \"人魂 - Void\"}";
         byte[] utf8Bytes = Encoding.UTF8.GetBytes(originalText + "\n");
         ms.Write(utf8Bytes);
         ms.Position = 0;

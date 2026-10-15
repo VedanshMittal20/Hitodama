@@ -17,8 +17,28 @@ public static class LoadoutStore
         }
 
         string json = File.ReadAllText(AppPaths.SettingsPath, Encoding.UTF8);
-        return JsonSerializer.Deserialize<SoulLoadout>(json, JsonOptions)
-            ?? throw new InvalidDataException("The saved Hitodama loadout is empty.");
+        SoulLoadout loadout = JsonSerializer.Deserialize<SoulLoadout>(json, JsonOptions)
+            ?? throw new InvalidDataException("The saved Void loadout is empty.");
+
+        bool renamed = false;
+        if (string.Equals(loadout.SoulName, "Hitodama", StringComparison.Ordinal))
+        {
+            loadout.SoulName = "Void";
+            renamed = true;
+        }
+
+        if (loadout.PersonalityPrompt?.Contains("Hitodama", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            loadout.PersonalityPrompt = loadout.PersonalityPrompt.Replace("Hitodama", "Void", StringComparison.OrdinalIgnoreCase);
+            renamed = true;
+        }
+
+        if (renamed)
+        {
+            Save(loadout);
+        }
+
+        return loadout;
     }
 
     public static void Save(SoulLoadout loadout)

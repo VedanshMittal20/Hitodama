@@ -20,7 +20,7 @@ public sealed class IpcProtocolTests
         {
             jsonrpc = "2.0",
             method = "loadout.set",
-            @params = new { SoulName = "Hitodama", Voice = "Charon" },
+            @params = new { SoulName = "Void", Voice = "Charon" },
             id = "req-201"
         };
 
@@ -32,7 +32,7 @@ public sealed class IpcProtocolTests
         // Assert
         root.GetProperty("jsonrpc").GetString().Should().Be("2.0");
         root.GetProperty("method").GetString().Should().Be("loadout.set");
-        root.GetProperty("params").GetProperty("SoulName").GetString().Should().Be("Hitodama");
+        root.GetProperty("params").GetProperty("SoulName").GetString().Should().Be("Void");
         root.GetProperty("id").GetString().Should().Be("req-201");
     }
 

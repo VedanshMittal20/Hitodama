@@ -28,7 +28,7 @@ public sealed class StudioLoadoutLiveUpdateScenarioTests : IDisposable
         // 2. User customizes all 4 slots in Studio UI:
         // Slot 1: Soul visual flame
         currentLoadout.VisualStyle = SoulVisualStyle.CyberOrb;
-        currentLoadout.SoulName = "Hitodama-Cyber";
+        currentLoadout.SoulName = "Void-Cyber";
 
         // Slot 2: Personality prompt
         currentLoadout.PersonalityName = "Tactical Operator";
@@ -59,7 +59,7 @@ public sealed class StudioLoadoutLiveUpdateScenarioTests : IDisposable
 
         // 5. Assert: Complete live synchronization of loadout slots
         shellReloadedLoadout.Should().NotBeNull();
-        shellReloadedLoadout!.SoulName.Should().Be("Hitodama-Cyber");
+        shellReloadedLoadout!.SoulName.Should().Be("Void-Cyber");
         shellReloadedLoadout.VisualStyle.Should().Be(SoulVisualStyle.CyberOrb);
         shellReloadedLoadout.PersonalityName.Should().Be("Tactical Operator");
         shellReloadedLoadout.PersonalityPrompt.Should().Contain("Ultra-terse terminal operator");
@@ -74,7 +74,7 @@ public sealed class StudioLoadoutLiveUpdateScenarioTests : IDisposable
         // 1. Configure active 4-slot loadout
         var loadout = new SoulLoadout
         {
-            SoulName = "Hitodama Prime",
+            SoulName = "Void Prime",
             Voice = VoicePreset.Fenrir,
             PersonalityPrompt = "Speak with deep resonance and extreme conciseness."
         };
@@ -121,7 +121,7 @@ public sealed class StudioLoadoutLiveUpdateScenarioTests : IDisposable
 
         // 4. Verify handshake payload meets API contract
         json.Should().Contain("Fenrir");
-        json.Should().Contain("Hitodama Prime");
+        json.Should().Contain("Void Prime");
         json.Should().Contain("Studio Monitors");
         json.Should().Contain("dark mode");
     }

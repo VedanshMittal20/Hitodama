@@ -10,6 +10,8 @@ public sealed class AudioPlayerService : IDisposable
     private bool _isPlaying;
     private bool _disposed;
 
+    public bool IsOutputAvailable => _output is not null;
+
     public AudioPlayerService()
     {
         var format = new WaveFormat(24000, 16, 1);
@@ -24,9 +26,10 @@ public sealed class AudioPlayerService : IDisposable
             _output = new WaveOutEvent();
             _output.Init(_buffer);
         }
-        catch
+        catch (Exception exception)
         {
             _output = null;
+            SafeDiagnostics.WriteFailure("audio", "output-init", exception);
         }
     }
 

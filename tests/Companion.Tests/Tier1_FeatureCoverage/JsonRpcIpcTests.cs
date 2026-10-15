@@ -96,17 +96,17 @@ public sealed class JsonRpcIpcTests : IAsyncDisposable
         // Act 1: Get loadout
         var loadout = await _client.GetLoadoutAsync(TimeSpan.FromSeconds(3));
         loadout.Should().NotBeNull();
-        loadout!.SoulName.Should().Be("Hitodama");
+        loadout!.SoulName.Should().Be("Void");
 
         // Act 2: Set modified loadout
-        loadout.SoulName = "Hitodama-CyberPro";
+        loadout.SoulName = "Void-CyberPro";
         loadout.Voice = VoicePreset.Fenrir;
         bool setSuccess = await _client.SetLoadoutAsync(loadout, TimeSpan.FromSeconds(3));
         setSuccess.Should().BeTrue();
 
         // Act 3: Verify persisted change
         var updated = await _client.GetLoadoutAsync(TimeSpan.FromSeconds(3));
-        updated!.SoulName.Should().Be("Hitodama-CyberPro");
+        updated!.SoulName.Should().Be("Void-CyberPro");
         updated.Voice.Should().Be(VoicePreset.Fenrir);
     }
 

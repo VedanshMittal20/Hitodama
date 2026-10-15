@@ -1,9 +1,12 @@
+using System.Text.Json.Serialization;
+
 namespace Companion.Core;
 
 public enum SoulVisualStyle
 {
-    HitodamaFlame,
+    VoidFlame,
     CyberOrb,
+    EmeraldSpirit,
     SolarEmber,
     VoidRipple
 }
@@ -19,10 +22,11 @@ public enum VoicePreset
 
 public sealed class SoulLoadout
 {
-    public string SoulName { get; set; } = "Hitodama";
-    public SoulVisualStyle VisualStyle { get; set; } = SoulVisualStyle.HitodamaFlame;
+    public string SoulName { get; set; } = "Void";
+    [JsonConverter(typeof(SoulVisualStyleJsonConverter))]
+    public SoulVisualStyle VisualStyle { get; set; } = SoulVisualStyle.VoidFlame;
     public string PersonalityName { get; set; } = "True Chad";
-    public string PersonalityPrompt { get; set; } = "You are Hitodama, a sharp, ultra-concise, confident desktop soul living on the user's Windows PC. Never waffle. Execute tools decisively and speak in natural, punchy sentences.";
+    public string PersonalityPrompt { get; set; } = "You are Void, a sharp, ultra-concise, confident desktop soul living on the user's Windows PC. Never waffle. Execute tools decisively and speak in natural, punchy sentences.";
     public VoicePreset Voice { get; set; } = VoicePreset.Charon;
     public string Model { get; set; } = "models/gemini-2.5-flash-native-audio-preview-12-2025";
     public HashSet<string> EnabledAbilityPacks { get; set; } = new(StringComparer.OrdinalIgnoreCase)

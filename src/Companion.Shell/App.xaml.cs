@@ -46,7 +46,7 @@ public partial class App : System.Windows.Application
         CreateTrayIcon();
         try
         {
-            _trayIcon?.ShowBalloonTip(3000, "Hitodama AI", "Hitodama is ready at the top of your screen! Click or scroll to expand.", System.Windows.Forms.ToolTipIcon.Info);
+            _trayIcon?.ShowBalloonTip(3000, "Void", "Void is ready at the top of your screen! Click or scroll to expand.", System.Windows.Forms.ToolTipIcon.Info);
         }
         catch { }
         File.AppendAllText(Path.Combine(AppPaths.Root, "shell.log"), $"[{DateTime.UtcNow:u}] Shell started successfully.\n");
@@ -56,18 +56,41 @@ public partial class App : System.Windows.Application
     {
         var menu = new System.Windows.Forms.ContextMenuStrip();
         menu.Items.Add("Show island", null, (_, _) => _island?.ShowDock());
-        menu.Items.Add("Shape Hitodama", null, (_, _) => _island?.OpenStudioWindow());
+        menu.Items.Add("Shape Void", null, (_, _) => _island?.OpenStudioWindow());
         menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
         menu.Items.Add("Exit", null, (_, _) => Shutdown());
 
         _trayIcon = new NotifyIcon
         {
-            Icon = System.Drawing.SystemIcons.Application,
-            Text = "Hitodama",
+            Icon = LoadTrayIcon(),
+            Text = "Void",
             ContextMenuStrip = menu,
             Visible = true
         };
         _trayIcon.DoubleClick += (_, _) => _island?.ToggleDock();
+    }
+
+    private static System.Drawing.Icon LoadTrayIcon()
+    {
+        try
+        {
+            var resource = System.Windows.Application.GetResourceStream(
+                new Uri("pack://application:,,,/Resources/void.ico", UriKind.Absolute));
+            if (resource is not null)
+            {
+                using (resource.Stream)
+                using (var icon = new System.Drawing.Icon(resource.Stream))
+                {
+                    return (System.Drawing.Icon)icon.Clone();
+                }
+            }
+        }
+        catch
+        {
+            // The executable icon remains available even if tray resource loading fails.
+        }
+
+        return System.Drawing.SystemIcons.Application;
     }
 
     protected override void OnExit(ExitEventArgs e)

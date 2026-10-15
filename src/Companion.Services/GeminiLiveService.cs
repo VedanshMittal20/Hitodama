@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using System.Net.WebSockets;
 using System.IO;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading.Channels;
 using Companion.Core;
@@ -18,10 +20,10 @@ public sealed class GeminiLiveService : IAsyncDisposable
     private readonly Func<string, JsonElement, string, CancellationToken, Task<string>>? _executeTool;
     private readonly Action<bool>? _trackUntrustedContext;
     private readonly SemaphoreSlim _sendLock = new(1, 1);
-    private readonly Channel<byte[]> _audioChunks = Channel.CreateBounded<byte[]>(
+    private readonly Channel<AudioInputMessage> _audioChunks = Channel.CreateBounded<AudioInputMessage>(
         new BoundedChannelOptions(64)
         {
-            FullMode = BoundedChannelFullMode.DropOldest,
+            FullMode = BoundedChannelFullMode.Wait,
             SingleReader = true,
             SingleWriter = false
         });
@@ -32,14 +34,18 @@ public sealed class GeminiLiveService : IAsyncDisposable
     private Task? _sendTask;
     private TaskCompletionSource? _setupComplete;
     private int _sessionEndedNotified;
+    private int _audioInputFailureReported;
     private bool _disposed;
     private bool _sessionSwitchSubscribed;
 
-    public event Action<string>? TranscriptReceived;
+    public event Action<string>? InputTranscriptReceived;
+    public event Action<string>? OutputTranscriptReceived;
     public event Action<bool>? SpeakingChanged;
     public event Action? Interrupted;
     public event Action<Exception>? ConnectionFailed;
     public event Action? SessionEnded;
+
+    private sealed record AudioInputMessage(byte[]? PcmBytes, bool IsStreamEnd);
 
     public bool IsConnected => _socket?.State == WebSocketState.Open && _setupComplete?.Task.IsCompletedSuccessfully == true;
 
@@ -74,22 +80,29 @@ public sealed class GeminiLiveService : IAsyncDisposable
         _sessionCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _setupComplete = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         Interlocked.Exchange(ref _sessionEndedNotified, 0);
+        Interlocked.Exchange(ref _audioInputFailureReported, 0);
         _socket = new ClientWebSocket();
         _socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(20);
         Uri uri = new($"{Endpoint}?key={Uri.EscapeDataString(apiKey)}");
+        var connectionClock = Stopwatch.StartNew();
+        SafeDiagnostics.WriteEvent("live", "connect-started");
         try
         {
             await _socket.ConnectAsync(uri, _sessionCancellation.Token);
+            SafeDiagnostics.WriteEvent("live", "websocket-connected");
             await SendSetupAsync(loadout, relevantMemories, _sessionCancellation.Token);
             _receiveTask = ReceiveLoopAsync(_sessionCancellation.Token);
             await _setupComplete.Task.WaitAsync(TimeSpan.FromSeconds(15), _sessionCancellation.Token);
+            SafeDiagnostics.WriteMetric("live", "setup-milliseconds", connectionClock.ElapsedMilliseconds);
+            SafeDiagnostics.WriteEvent("live", "setup-complete");
             _sendTask = SendAudioLoopAsync(_sessionCancellation.Token);
             ResetInactivityTimer();
             SystemEvents.SessionSwitch += OnSessionSwitch;
             _sessionSwitchSubscribed = true;
         }
-        catch
+        catch (Exception exception)
         {
+            SafeDiagnostics.WriteFailure("live", "connect", exception);
             await DisconnectAsync();
             throw;
         }
@@ -158,20 +171,44 @@ public sealed class GeminiLiveService : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(pcmChunk);
         if (!IsConnected)
         {
+            CryptographicOperations.ZeroMemory(pcmChunk);
             return;
         }
 
-        if (!_audioChunks.Writer.TryWrite(pcmChunk))
+        if (!_audioChunks.Writer.TryWrite(new AudioInputMessage(pcmChunk, IsStreamEnd: false)))
         {
-            ConnectionFailed?.Invoke(new InvalidOperationException("Gemini audio input buffer is full."));
+            CryptographicOperations.ZeroMemory(pcmChunk);
+            if (Interlocked.Exchange(ref _audioInputFailureReported, 1) == 0)
+            {
+                SafeDiagnostics.WriteEvent("live", "audio-input-buffer-full");
+                ConnectionFailed?.Invoke(new InvalidOperationException("Gemini audio input buffer is full."));
+            }
         }
         else
         {
+            Interlocked.Exchange(ref _audioInputFailureReported, 0);
             ResetInactivityTimer();
         }
     }
 
-    public Task SendScreenQuestionAsync(
+    public void EndAudioStream()
+    {
+        if (!IsConnected)
+        {
+            return;
+        }
+
+        if (!_audioChunks.Writer.TryWrite(new AudioInputMessage(null, IsStreamEnd: true)))
+        {
+            SafeDiagnostics.WriteEvent("live", "audio-end-buffer-full");
+            ConnectionFailed?.Invoke(new InvalidOperationException("Gemini audio input buffer is full."));
+            return;
+        }
+
+        SafeDiagnostics.WriteEvent("live", "audio-stream-ended");
+    }
+
+    public async Task SendScreenQuestionAsync(
         byte[] jpegImage,
         byte[] pcmAudio,
         CancellationToken cancellationToken = default)
@@ -183,26 +220,41 @@ public sealed class GeminiLiveService : IAsyncDisposable
             throw new InvalidOperationException("Gemini Live must be connected before sending a screen question.");
         }
 
-        var mediaChunks = new List<object>
+        if (jpegImage.Length == 0)
         {
-            new
-            {
-                mimeType = "image/jpeg",
-                data = Convert.ToBase64String(jpegImage)
-            }
-        };
-        if (pcmAudio.Length > 0)
-        {
-            mediaChunks.Add(new
-            {
-                mimeType = "audio/pcm;rate=16000",
-                data = Convert.ToBase64String(pcmAudio)
-            });
+            throw new ArgumentException("A screen image is required.", nameof(jpegImage));
         }
 
-        return SendJsonAsync(
-            new { realtimeInput = new { mediaChunks } },
+        if (pcmAudio.Length == 0)
+        {
+            throw new ArgumentException("A spoken question is required.", nameof(pcmAudio));
+        }
+
+        // Send the still image and the captured raw PCM together in one realtime input event.
+        // The old mediaChunks array dropped its second item, and clientContent is not the
+        // realtime audio/video transport used by Live sessions.
+        await SendJsonAsync(
+            new
+            {
+                realtimeInput = new
+                {
+                    video = new
+                    {
+                        mimeType = "image/jpeg",
+                        data = Convert.ToBase64String(jpegImage)
+                    },
+                    audio = new
+                    {
+                        mimeType = "audio/pcm;rate=16000",
+                        data = Convert.ToBase64String(pcmAudio)
+                    }
+                }
+            },
             cancellationToken);
+        await SendJsonAsync(new { realtimeInput = new { audioStreamEnd = true } }, cancellationToken);
+        SafeDiagnostics.WriteMetric("live", "circle-image-bytes", jpegImage.Length);
+        SafeDiagnostics.WriteMetric("live", "circle-pcm-bytes", pcmAudio.Length);
+        SafeDiagnostics.WriteEvent("live", "circle-question-sent");
     }
 
     private async Task SendSetupAsync(
@@ -274,34 +326,53 @@ public sealed class GeminiLiveService : IAsyncDisposable
     {
         try
         {
-            await foreach (byte[] chunk in _audioChunks.Reader.ReadAllAsync(cancellationToken))
+            await foreach (AudioInputMessage input in _audioChunks.Reader.ReadAllAsync(cancellationToken))
             {
                 if (_socket?.State != WebSocketState.Open)
                 {
+                    if (input.PcmBytes is not null)
+                    {
+                        CryptographicOperations.ZeroMemory(input.PcmBytes);
+                    }
+
+                    ClearQueuedAudio();
                     return;
                 }
 
                 try
                 {
-                    var message = new
+                    if (input.IsStreamEnd)
                     {
-                        realtimeInput = new
+                        await SendJsonAsync(new { realtimeInput = new { audioStreamEnd = true } }, cancellationToken);
+                        continue;
+                    }
+
+                    byte[] chunk = input.PcmBytes ?? [];
+                    if (chunk.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    await SendJsonAsync(
+                        new
                         {
-                            mediaChunks = new[]
+                            realtimeInput = new
                             {
-                                new
+                                audio = new
                                 {
                                     mimeType = "audio/pcm;rate=16000",
                                     data = Convert.ToBase64String(chunk)
                                 }
                             }
-                        }
-                    };
-                    await SendJsonAsync(message, cancellationToken);
+                        },
+                        cancellationToken);
                 }
                 finally
                 {
-                    Array.Clear(chunk);
+                    if (input.PcmBytes is not null)
+                    {
+                        CryptographicOperations.ZeroMemory(input.PcmBytes);
+                    }
                 }
             }
         }
@@ -310,29 +381,49 @@ public sealed class GeminiLiveService : IAsyncDisposable
         }
         catch (Exception exception)
         {
+            SafeDiagnostics.WriteFailure("live", "audio-send", exception);
             ConnectionFailed?.Invoke(exception);
             _sessionCancellation?.Cancel();
             _socket?.Abort();
+            ClearQueuedAudio();
         }
     }
 
     private async Task SendJsonAsync<T>(T message, CancellationToken cancellationToken)
     {
-        byte[] payload = JsonSerializer.SerializeToUtf8Bytes(message);
         ClientWebSocket socket = _socket
             ?? throw new InvalidOperationException("Gemini Live is not connected.");
-        await _sendLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        byte[] payload = JsonSerializer.SerializeToUtf8Bytes(message);
         try
         {
-            await socket.SendAsync(payload, WebSocketMessageType.Text, endOfMessage: true, cancellationToken)
-                .ConfigureAwait(false);
+            await _sendLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await socket.SendAsync(payload, WebSocketMessageType.Text, endOfMessage: true, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            finally
+            {
+                _sendLock.Release();
+            }
         }
         finally
         {
-            _sendLock.Release();
+            CryptographicOperations.ZeroMemory(payload);
         }
 
         ResetInactivityTimer();
+    }
+
+    private void ClearQueuedAudio()
+    {
+        while (_audioChunks.Reader.TryRead(out AudioInputMessage? input))
+        {
+            if (input?.PcmBytes is not null)
+            {
+                CryptographicOperations.ZeroMemory(input.PcmBytes);
+            }
+        }
     }
 
     private async Task ReceiveLoopAsync(CancellationToken cancellationToken)
@@ -356,6 +447,7 @@ public sealed class GeminiLiveService : IAsyncDisposable
         }
         catch (Exception exception)
         {
+            SafeDiagnostics.WriteFailure("live", "receive", exception);
             _setupComplete?.TrySetException(exception);
             ConnectionFailed?.Invoke(exception);
         }
@@ -423,13 +515,14 @@ public sealed class GeminiLiveService : IAsyncDisposable
             Interrupted?.Invoke();
         }
 
-        if (content.TryGetProperty("inputTranscription", out JsonElement inputTranscript) &&
+        if ((content.TryGetProperty("inputTranscription", out JsonElement inputTranscript) ||
+             content.TryGetProperty("interimInputTranscription", out inputTranscript)) &&
             inputTranscript.TryGetProperty("text", out JsonElement inputText))
         {
             string? transcript = inputText.GetString();
             if (!string.IsNullOrWhiteSpace(transcript))
             {
-                TranscriptReceived?.Invoke(transcript);
+                InputTranscriptReceived?.Invoke(transcript);
             }
         }
 
@@ -439,7 +532,7 @@ public sealed class GeminiLiveService : IAsyncDisposable
             string? transcript = outputText.GetString();
             if (!string.IsNullOrWhiteSpace(transcript))
             {
-                TranscriptReceived?.Invoke(transcript);
+                OutputTranscriptReceived?.Invoke(transcript);
             }
         }
 
@@ -457,7 +550,15 @@ public sealed class GeminiLiveService : IAsyncDisposable
                 byte[] pcm = Convert.FromBase64String(dataElement.GetString() ?? string.Empty);
                 if (pcm.Length > 0)
                 {
-                    _audioPlayer.EnqueuePcm(pcm);
+                    try
+                    {
+                        _audioPlayer.EnqueuePcm(pcm);
+                    }
+                    finally
+                    {
+                        CryptographicOperations.ZeroMemory(pcm);
+                    }
+
                     SpeakingChanged?.Invoke(true);
                 }
             }
@@ -539,6 +640,8 @@ public sealed class GeminiLiveService : IAsyncDisposable
 
             _sendTask = null;
         }
+
+        ClearQueuedAudio();
 
         _socket?.Dispose();
         _socket = null;

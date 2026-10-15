@@ -4,7 +4,9 @@ using System.Windows.Media;
 using Companion.Core;
 using Brush = System.Windows.Media.Brush;
 using Color = System.Windows.Media.Color;
+using Pen = System.Windows.Media.Pen;
 using Point = System.Windows.Point;
+using Size = System.Windows.Size;
 
 namespace Companion.Shell.Controls;
 
@@ -56,13 +58,24 @@ public sealed class SoulOrbControl : FrameworkElement
         Color.FromRgb(245, 243, 255), Color.FromRgb(167, 139, 250), Color.FromArgb(0, 49, 46, 129));
     private static readonly Brush VoidFlameBrush = CreateRadialBrush(
         Color.FromArgb(225, 196, 181, 253), Color.FromArgb(165, 99, 102, 241), Color.FromArgb(0, 30, 27, 75));
+    private static readonly Brush EmeraldCoreBrush = CreateRadialBrush(
+        Color.FromRgb(236, 253, 245), Color.FromRgb(16, 185, 129), Color.FromArgb(0, 4, 120, 87));
+    private static readonly Brush EmeraldFlameBrush = CreateRadialBrush(
+        Color.FromArgb(225, 167, 243, 208), Color.FromArgb(165, 52, 211, 153), Color.FromArgb(0, 6, 95, 70));
+
+    private static readonly Brush ErrorCoreBrush = CreateRadialBrush(
+        Color.FromRgb(254, 202, 202), Color.FromRgb(239, 68, 68), Color.FromArgb(0, 153, 27, 27));
+    private static readonly Brush ErrorHaloBrush = CreateRadialBrush(
+        Color.FromArgb(160, 239, 68, 68), Color.FromArgb(80, 220, 38, 38), Color.FromArgb(0, 69, 10, 10));
 
     private readonly Stopwatch _clock = new();
     private SoulState _soulState;
-    private SoulVisualStyle _visualStyle = SoulVisualStyle.HitodamaFlame;
+    private SoulVisualStyle _visualStyle = SoulVisualStyle.VoidFlame;
     private double _audioLevel;
     private bool _isLoaded;
     private bool _isSubscribed;
+    private TimeSpan _lastRenderTime;
+    private static readonly TimeSpan FrameInterval30Fps = TimeSpan.FromSeconds(1.0 / 30.0);
 
     public SoulState SoulState
     {
@@ -135,73 +148,93 @@ public sealed class SoulOrbControl : FrameworkElement
 
         double size = Math.Min(width, height);
         Point center = new((width - size) / 2 + size / 2, (height - size) / 2 + size / 2);
-        double radius = size * 0.38;
+        double radius = size * 0.36;
+        double time = _clock.Elapsed.TotalSeconds;
 
         if (_soulState == SoulState.Idle)
         {
-            // Rich multi-stop ethereal spirit flame (cyan/violet/emerald with ambient halo & specular shine)
-            drawingContext.DrawEllipse(StyleHaloBrush, null, center, radius * 1.44, radius * 1.44);
-            drawingContext.DrawEllipse(StyleFlameBrush, null, center, radius * 1.12, radius * 1.12);
-            drawingContext.DrawEllipse(StyleCoreBrush, null, center, radius * 0.86, radius * 0.86);
-            drawingContext.DrawEllipse(InnerBrush, null, center, radius * 0.60, radius * 0.60);
+            // Idle: solid core, faint resting halo. No animation loop when idle.
+            drawingContext.DrawEllipse(StyleHaloBrush, null, center, radius * 1.35, radius * 1.35);
+            drawingContext.DrawEllipse(StyleFlameBrush, null, center, radius * 1.08, radius * 1.08);
+            drawingContext.DrawEllipse(StyleCoreBrush, null, center, radius * 0.82, radius * 0.82);
+            drawingContext.DrawEllipse(InnerBrush, null, center, radius * 0.54, radius * 0.54);
             drawingContext.DrawEllipse(SpecularBrush, null,
-                new Point(center.X - radius * 0.22, center.Y - radius * 0.28), radius * 0.24, radius * 0.15);
+                new Point(center.X - radius * 0.20, center.Y - radius * 0.25), radius * 0.20, radius * 0.12);
             return;
         }
 
-        double time = _clock.Elapsed.TotalSeconds;
-        double activity = _soulState is SoulState.Listening or SoulState.Speaking
-            ? Math.Max(0.16, _audioLevel)
-            : 0.56;
         if (_soulState == SoulState.Error)
         {
-            activity = 0.28;
+            // Error: desaturated red core, brief single-axis jitter (3 oscillations over 180ms), then static.
+            double jitter = 0;
+            if (time < 0.18)
+            {
+                jitter = Math.Sin(time / 0.18 * Math.PI * 6.0) * (radius * 0.15);
+            }
+            Point jitteredCenter = new(center.X + jitter, center.Y);
+            drawingContext.DrawEllipse(ErrorHaloBrush, null, jitteredCenter, radius * 1.30, radius * 1.30);
+            drawingContext.DrawEllipse(ErrorCoreBrush, null, jitteredCenter, radius * 0.85, radius * 0.85);
+            drawingContext.DrawEllipse(SpecularBrush, null,
+                new Point(jitteredCenter.X - radius * 0.18, jitteredCenter.Y - radius * 0.22), radius * 0.18, radius * 0.10);
+            return;
         }
 
-        double pulse = 1 + Math.Sin(time * 3.1) * (0.045 + 0.075 * activity);
-        double sway = Math.Sin(time * 1.7) * radius * (0.06 + 0.12 * activity);
-
-        DrawBlob(drawingContext, center, radius * 1.3 * pulse, time, 0.8, activity, StyleHaloBrush, 11);
-        DrawBlob(drawingContext, new Point(center.X + sway * 0.55, center.Y - sway * 0.42),
-            radius * pulse, time, 1.25, activity, StyleFlameBrush, 13);
-        DrawBlob(drawingContext, new Point(center.X - sway * 0.48, center.Y + sway * 0.28),
-            radius * 0.69 * pulse, time, 1.8, activity, StyleCoreBrush, 10);
-
+        // Active solid core
+        drawingContext.DrawEllipse(StyleHaloBrush, null, center, radius * 1.15, radius * 1.15);
+        drawingContext.DrawEllipse(StyleCoreBrush, null, center, radius * 0.82, radius * 0.82);
+        drawingContext.DrawEllipse(InnerBrush, null, center, radius * 0.54, radius * 0.54);
         drawingContext.DrawEllipse(SpecularBrush, null,
-            new Point(center.X - radius * 0.18 + sway * 0.18, center.Y - radius * 0.22),
-            radius * 0.18, radius * 0.11);
-    }
+            new Point(center.X - radius * 0.20, center.Y - radius * 0.25), radius * 0.20, radius * 0.12);
 
-    private void DrawBlob(DrawingContext drawingContext, Point center, double radius,
-        double time, double frequency, double activity, Brush brush, int pointCount)
-    {
-        var geometry = new StreamGeometry();
-        using (StreamGeometryContext context = geometry.Open())
+        if (_soulState == SoulState.Listening)
         {
-            var points = new Point[pointCount];
-            for (int index = 0; index < pointCount; index++)
-            {
-                double angle = 2 * Math.PI * index / pointCount;
-                double waveA = Math.Sin(time * frequency + angle * 2.0 + index * 0.27);
-                double waveB = Math.Sin(time * (frequency * 0.63) - angle * 3.0 + index * 0.41);
-                double deformation = 1 + activity * (waveA * 0.12 + waveB * 0.055);
-                points[index] = new Point(
-                    center.X + Math.Cos(angle) * radius * deformation,
-                    center.Y + Math.Sin(angle) * radius * deformation);
-            }
+            // Listening: concentric ring that scales with input volume clamped to 1.3x.
+            double scale = 1.0 + Math.Clamp(_audioLevel, 0.0, 1.0) * 0.30;
+            double ringRadius = radius * 1.25 * scale;
+            var pen = new Pen(StyleFlameBrush, 2.0);
+            drawingContext.DrawEllipse(null, pen, center, ringRadius, ringRadius);
+        }
+        else if (_soulState == SoulState.Thinking)
+        {
+            // Thinking: rotating segmented arc (3 dashes orbiting).
+            double ringRadius = radius * 1.25;
+            double baseAngle = time * 3.5;
+            const double arcLength = Math.PI / 4.0;
+            var pen = new Pen(StyleFlameBrush, 2.2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
 
-            context.BeginFigure(points[0], isFilled: true, isClosed: true);
-            for (int index = 0; index < pointCount; index++)
+            for (int i = 0; i < 3; i++)
             {
-                Point current = points[index];
-                Point next = points[(index + 1) % pointCount];
-                Point midpoint = new((current.X + next.X) / 2, (current.Y + next.Y) / 2);
-                context.QuadraticBezierTo(current, midpoint, isStroked: true, isSmoothJoin: true);
+                double angle1 = baseAngle + i * (2.0 * Math.PI / 3.0);
+                double angle2 = angle1 + arcLength;
+                Point p1 = new(center.X + Math.Cos(angle1) * ringRadius, center.Y + Math.Sin(angle1) * ringRadius);
+                Point p2 = new(center.X + Math.Cos(angle2) * ringRadius, center.Y + Math.Sin(angle2) * ringRadius);
+
+                var arcGeom = new StreamGeometry();
+                using (var sgc = arcGeom.Open())
+                {
+                    sgc.BeginFigure(p1, isFilled: false, isClosed: false);
+                    sgc.ArcTo(p2, new Size(ringRadius, ringRadius), 0, false, SweepDirection.Clockwise, isStroked: true, isSmoothJoin: true);
+                }
+                arcGeom.Freeze();
+                drawingContext.DrawGeometry(null, pen, arcGeom);
             }
         }
-
-        geometry.Freeze();
-        drawingContext.DrawGeometry(brush, null, geometry);
+        else if (_soulState == SoulState.Speaking)
+        {
+            // Speaking: outer ring whose thickness breathes with the output envelope.
+            double thickness = 1.5 + Math.Max(0.12, _audioLevel) * 4.5;
+            double ringRadius = radius * 1.25;
+            var pen = new Pen(StyleFlameBrush, thickness);
+            drawingContext.DrawEllipse(null, pen, center, ringRadius, ringRadius);
+        }
+        else if (_soulState == SoulState.Acting)
+        {
+            // Acting: single satellite dot orbiting once per second.
+            double orbitRadius = radius * 1.28;
+            double angle = 2.0 * Math.PI * time;
+            Point satellite = new(center.X + Math.Cos(angle) * orbitRadius, center.Y + Math.Sin(angle) * orbitRadius);
+            drawingContext.DrawEllipse(StyleFlameBrush, null, satellite, radius * 0.18, radius * 0.18);
+        }
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -216,7 +249,23 @@ public sealed class SoulOrbControl : FrameworkElement
         UpdateAnimationSubscription();
     }
 
-    private void OnRendering(object? sender, EventArgs e) => InvalidateVisual();
+    private void OnRendering(object? sender, EventArgs e)
+    {
+        var elapsed = _clock.Elapsed;
+        if (_soulState == SoulState.Error && elapsed.TotalSeconds >= 0.18)
+        {
+            CompositionTarget.Rendering -= OnRendering;
+            _isSubscribed = false;
+            InvalidateVisual();
+            return;
+        }
+
+        if (elapsed - _lastRenderTime >= FrameInterval30Fps)
+        {
+            _lastRenderTime = elapsed;
+            InvalidateVisual();
+        }
+    }
 
     private void UpdateAnimationSubscription()
     {
@@ -278,6 +327,7 @@ public sealed class SoulOrbControl : FrameworkElement
     private Brush StyleCoreBrush => _visualStyle switch
     {
         SoulVisualStyle.CyberOrb => CyberCoreBrush,
+        SoulVisualStyle.EmeraldSpirit => EmeraldCoreBrush,
         SoulVisualStyle.SolarEmber => EmberCoreBrush,
         SoulVisualStyle.VoidRipple => VoidCoreBrush,
         _ => SoulCyanBrush
@@ -286,6 +336,7 @@ public sealed class SoulOrbControl : FrameworkElement
     private Brush StyleFlameBrush => _visualStyle switch
     {
         SoulVisualStyle.CyberOrb => CyberFlameBrush,
+        SoulVisualStyle.EmeraldSpirit => EmeraldFlameBrush,
         SoulVisualStyle.SolarEmber => EmberFlameBrush,
         SoulVisualStyle.VoidRipple => VoidFlameBrush,
         _ => FlameBrush
@@ -294,6 +345,7 @@ public sealed class SoulOrbControl : FrameworkElement
     private Brush StyleHaloBrush => _visualStyle switch
     {
         SoulVisualStyle.CyberOrb => CyberFlameBrush,
+        SoulVisualStyle.EmeraldSpirit => EmeraldFlameBrush,
         SoulVisualStyle.SolarEmber => EmberFlameBrush,
         SoulVisualStyle.VoidRipple => VoidFlameBrush,
         _ => HaloBrush

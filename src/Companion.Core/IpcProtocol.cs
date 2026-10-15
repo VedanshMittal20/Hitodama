@@ -9,8 +9,8 @@ namespace Companion.Core;
 
 public static class IpcConstants
 {
-    public const string PipeName = "companion-ipc";
-    public const string LegacyPipeName = "hitodama-companion-ipc";
+    public const string PipeName = "void-companion-ipc";
+    public const string LegacyPipeName = "companion-ipc";
     public const string JsonRpcVersion = "2.0";
 }
 

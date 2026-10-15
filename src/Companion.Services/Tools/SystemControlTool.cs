@@ -127,11 +127,11 @@ public sealed class SystemControlTool : ITool
                     return Task.FromResult(ToolResult.Ok("System entering sleep state."));
 
                 case "restart":
-                    Process.Start(new ProcessStartInfo("shutdown.exe", "/r /t 5 /c \"Hitodama scheduled restart\"") { CreateNoWindow = true });
+                    Process.Start(new ProcessStartInfo("shutdown.exe", "/r /t 5 /c \"Void scheduled restart\"") { CreateNoWindow = true });
                     return Task.FromResult(ToolResult.Ok("System restarting in 5 seconds."));
 
                 case "shutdown":
-                    Process.Start(new ProcessStartInfo("shutdown.exe", "/s /t 5 /c \"Hitodama scheduled shutdown\"") { CreateNoWindow = true });
+                    Process.Start(new ProcessStartInfo("shutdown.exe", "/s /t 5 /c \"Void scheduled shutdown\"") { CreateNoWindow = true });
                     return Task.FromResult(ToolResult.Ok("System shutting down in 5 seconds."));
 
                 default:

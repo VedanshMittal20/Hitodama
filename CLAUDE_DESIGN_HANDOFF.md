@@ -1,12 +1,12 @@
-# Hitodama AI — Design and Motion Handoff
+# Void AI — Design and Motion Handoff
 
-Use this brief as context when reviewing the Hitodama codebase for a visual and animation makeover. The goal is a polished, distinctive Windows companion that feels calm and responsive while staying lightweight during long idle periods.
+Use this brief as context when reviewing the Void codebase for a visual and animation makeover. The goal is a polished, distinctive Windows companion that feels calm and responsive while staying lightweight during long idle periods.
 
 ## Product summary
 
-Hitodama AI is a voice-first Windows desktop companion. Its resident Shell lives as a compact, top-centered “island” over other apps; users expand it into a small utility dock, invoke voice and screen-selection actions with global shortcuts, and use an on-demand Studio window to configure the companion. It is a native desktop application, not a web app.
+Void AI is a voice-first Windows desktop companion. Its resident Shell lives as a compact, top-centered “island” over other apps; users expand it into a small utility dock, invoke voice and screen-selection actions with global shortcuts, and use an on-demand Studio window to configure the companion. It is a native desktop application, not a web app.
 
-The personality is represented by a small animated Soul Orb / flame. The orb has Idle, Listening, Thinking, Speaking, Acting, and Error states, plus selectable looks such as Hitodama Flame, Cyber Orb, Solar Ember, and Void Ripple.
+The personality is represented by a small animated Soul Orb / flame. The orb has Idle, Listening, Thinking, Speaking, Acting, and Error states, plus selectable looks such as Void Flame, Cyber Orb, Solar Ember, and Void Ripple.
 
 ## Stack and architecture
 

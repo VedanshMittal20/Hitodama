@@ -46,10 +46,16 @@ public interface IDatabaseService
     // Stats & Clipboard
     void IncrementStat(string metric, long amount = 1, DateTime? dateUtc = null);
     DailyStats GetTodayStats(DateTime? dateUtc = null);
-    IReadOnlyList<ClipEntry> GetClipboardEntries(int limit = 200);
-    long AddClipboardText(string text, int maxEntries = 200);
-    long AddClipboardImage(byte[] pngBytes, int maxEntries = 200);
+    IReadOnlyList<ClipEntry> GetClipboardEntries(int limit = 10);
+    long AddClipboardText(string text, int maxEntries = 10);
+    long AddClipboardImage(byte[] pngBytes, int maxEntries = 10);
+    bool SetClipboardEntryPinned(long id, bool isPinned);
     bool DeleteClipboardEntry(long id);
+
+    // Persistent countdown timer
+    DateTimeOffset? GetCountdownTimerEndUtc();
+    void SetCountdownTimerEndUtc(DateTimeOffset endUtc);
+    void ClearCountdownTimer();
 
     // Audit Log
     void AddAuditEntry(string toolName, string argumentsJson, string outcome);

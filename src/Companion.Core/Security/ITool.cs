@@ -3,7 +3,7 @@ using System.Text.Json;
 namespace Companion.Core;
 
 /// <summary>
-/// Interface implemented by all Hitodama tools.
+/// Interface implemented by all Void tools.
 /// </summary>
 public interface ITool
 {

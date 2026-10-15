@@ -2,25 +2,26 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Circle to Ask" WindowStyle="None" AllowsTransparency="True"
-        Background="#18000000" Topmost="True" ShowInTaskbar="False"
+        Background="#66000000" Topmost="True" ShowInTaskbar="False"
         ResizeMode="NoResize" ShowActivated="False">
   <Grid>
     <Canvas x:Name="InkCanvas" Background="Transparent"
             MouseLeftButtonDown="OnMouseDown" MouseMove="OnMouseMove"
             MouseLeftButtonUp="OnMouseUp" />
-    <Border HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,26,0,0"
-            Background="{StaticResource IslandGlassBrush}"
-            BorderBrush="{StaticResource IslandSpecularBorderBrush}"
+    <Border HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,24"
+            Width="320"
+            Background="{StaticResource Surface1Brush}"
+            BorderBrush="{StaticResource StrokeStrongBrush}"
             BorderThickness="1"
-            CornerRadius="20" Padding="18,9" IsHitTestVisible="False">
-      <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-        <Border Width="7" Height="7" CornerRadius="3.5" Background="{StaticResource SoulCyanBrush}" VerticalAlignment="Center" Margin="0,0,10,0" />
-        <TextBlock Text="Circle anything and ask out loud" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12.5" FontWeight="SemiBold" VerticalAlignment="Center" />
-        <TextBlock Text="·" Foreground="{StaticResource TextMutedBrush}" Margin="8,0" VerticalAlignment="Center" />
-        <Border Background="#1AFFFFFF" BorderBrush="#26FFFFFF" BorderThickness="1" CornerRadius="5" Padding="5,1" VerticalAlignment="Center" Margin="0,0,6,0">
-          <TextBlock Text="Ctrl + Shift" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource SoulCyanBrush}" FontFamily="Consolas, Segoe UI Variable Text" />
+            CornerRadius="20" Padding="16,8" IsHitTestVisible="False">
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <Border Width="7" Height="7" CornerRadius="3.5" Background="{StaticResource AccentBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
+        <TextBlock Text="Circle anything &amp; ask" Foreground="{StaticResource Text1Brush}" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" />
+        <TextBlock Text="·" Foreground="{StaticResource Text3Brush}" Margin="6,0" VerticalAlignment="Center" />
+        <Border Background="{StaticResource Surface2Brush}" BorderBrush="{StaticResource StrokeSubtleBrush}" BorderThickness="1" CornerRadius="5" Padding="5,1" VerticalAlignment="Center" Margin="0,0,6,0">
+          <TextBlock Text="Ctrl + Shift" FontSize="10.5" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" FontFamily="Consolas, Segoe UI Variable Text" />
         </Border>
-        <TextBlock Text="release to send" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" VerticalAlignment="Center" />
+        <TextBlock Text="release" Foreground="{StaticResource Text2Brush}" FontSize="11.5" VerticalAlignment="Center" />
       </StackPanel>
     </Border>
   </Grid>

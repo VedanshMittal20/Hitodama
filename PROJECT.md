@@ -1,7 +1,7 @@
-# Project: Hitodama AI
+# Project: Void AI
 
 ## Architecture
-Hitodama AI is a voice-first Windows desktop companion built in C# 12 and .NET 8 WPF (`net8.0-windows10.0.19041.0`).
+Void AI is a voice-first Windows desktop companion built in C# 12 and .NET 8 WPF (`net8.0-windows10.0.19041.0`).
 The solution is organized into 4 cleanly decoupled projects:
 1. **Companion.Core**: Fundamental data models, DPAPI secret storage, SQLite database with WAL and FTS5 full-text search triggers, JSON-RPC 2.0 NamedPipe IPC contracts, and Tool/Gatekeeper security interfaces.
 2. **Companion.Services**: Domain services including 120Hz SpringSolver, NAudio 16kHz PCM capture with hangover VAD, 24kHz audio playback with barge-in flush, Gemini Live WebSocket client, Gemini Vision service, Low-level keyboard hook (WH_KEYBOARD_LL), System control (GSMTC, Wi-Fi, Bluetooth, Audio, Power), and AutonomousScheduler.
@@ -47,7 +47,7 @@ The solution is organized into 4 cleanly decoupled projects:
 
 ## Code Layout
 - `src/Companion.Core/`
-  - `AppPaths.cs`: Standard app data directory resolution (`%LocalAppData%\Hitodama`).
+  - `AppPaths.cs`: Standard app data directory resolution (`%LocalAppData%\Void`).
   - `DatabaseService.cs`: SQLite connection, WAL mode, FTS5 table, sync triggers, CRUD operations, reactive events.
   - `SecretStore.cs`: DPAPI protected storage for Gemini API key and credentials.
   - `IpcProtocol.cs`: JSON-RPC 2.0 request/response/notification definitions and named pipe client/server (`companion-ipc`).
@@ -116,7 +116,7 @@ The solution is organized into 4 cleanly decoupled projects:
 |---|------|-------|-------------|--------|
 | M1 | Core Infrastructure & Security | R1: DPAPI SecretStore, SQLite WAL+FTS5 CRUD & events, JSON-RPC IPC over `companion-ipc`, Tool Framework & Gatekeeper security engine | none | Implemented; certified PASS |
 | M2 | 120Hz Spring Physics & Shell Mechanics | R2: SpringSolver CompositionTarget detachment, Non-activating transparent HWND, WM_NCHITTEST passthrough, gestures, fullscreen auto-hide, Shell bug fixes | M1 | Implemented; verified PASS |
-| M3 | Authentic 7 Hitodama Island Tabs & Offline Utilities | R3: Controls (GSMTC+Equalizer+WiFi+BT), Today, Stats Bento, Clipboard ring buffer+SendInput, Apps fuzzy launcher, Wallpaper WIC, Power tiles | M1, M2 | Implemented; verified PASS |
+| M3 | Authentic 7 Void Island Tabs & Offline Utilities | R3: Controls (GSMTC+Equalizer+WiFi+BT), Today, Stats Bento, Clipboard ring buffer+SendInput, Apps fuzzy launcher, Wallpaper WIC, Power tiles | M1, M2 | Implemented; verified PASS |
 | M4 | Global Hotkeys, Circle to Ask & Clean Dictation | R4: WH_KEYBOARD_LL hook + timers, CircleToAskOverlay lasso crop + mic prompt, Clean Dictation SendInput, Ctrl+Alt+Space, Ctrl+Alt+Backspace kill switch | M1, M2 | Implemented; verified PASS |
 | M5 | Real-Time Gemini Live Audio Pipeline & 4-Slot Soul Loadout | R5: Gemini Live Bidi WebSocket, 4-slot setup handshake + FTS5 memory, NAudio 16kHz VAD, 24kHz playback + instant barge-in flush, SoulOrbControl flame | M1, M2, M3 | Implemented; verified PASS |
 | M6 | Autonomous Scheduler & On-Demand Studio Process | R6: Zero-polling AutonomousScheduler, Companion.Studio (onboarding, loadout, memory browser, audit log), 2-min idle memory trim | M1, M4, M5 | Implemented; verified PASS |

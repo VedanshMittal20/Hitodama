@@ -54,7 +54,7 @@ public sealed class DesktopAutomationService
 
         if (AutomationElement.FromHandle(handle).Current.ProcessId == Environment.ProcessId)
         {
-            throw new InvalidOperationException("Hitodama cannot inspect or control its own window.");
+            throw new InvalidOperationException("Void cannot inspect or control its own window.");
         }
 
         return handle;
@@ -160,7 +160,7 @@ public sealed class DesktopAutomationService
         AutomationElement root = AutomationElement.FromHandle(handle);
         if (root.Current.ProcessId == Environment.ProcessId)
         {
-            throw new InvalidOperationException("Hitodama cannot inspect or control its own window.");
+            throw new InvalidOperationException("Void cannot inspect or control its own window.");
         }
 
         return root;

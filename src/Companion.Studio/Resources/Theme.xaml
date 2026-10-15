@@ -4,46 +4,170 @@
                     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
                     mc:Ignorable="po">
 
-  <!-- Core Palette Colors -->
-  <Color x:Key="IslandBaseColor">#FF090A0D</Color>
-  <Color x:Key="IslandElevatedColor">#FF111318</Color>
-  <Color x:Key="IslandHoverColor">#FF1A1C22</Color>
-  <Color x:Key="IslandBorderColor">#24FFFFFF</Color>
-  <Color x:Key="TextPrimaryColor">#FFF5F6F8</Color>
-  <Color x:Key="TextSecondaryColor">#FF9A9DA5</Color>
-  <Color x:Key="TextMutedColor">#FF6F737D</Color>
-  <Color x:Key="AccentColor">#FFFF6B6B</Color>
-  <Color x:Key="SoulCyanColor">#FF38BDF8</Color>
-  <Color x:Key="SoulVioletColor">#FF818CF8</Color>
-  <Color x:Key="SoulEmeraldColor">#FF34D399</Color>
-  <Color x:Key="SoulAmberColor">#FFFBBF24</Color>
-  <Color x:Key="SoulCrimsonColor">#FFF87171</Color>
+  <ResourceDictionary.MergedDictionaries>
+    <ResourceDictionary Source="Tokens.xaml" />
+  </ResourceDictionary.MergedDictionaries>
 
-  <!-- Solid Color Brushes (Frozen for zero-allocation performance) -->
-  <SolidColorBrush x:Key="IslandBaseBrush" Color="{StaticResource IslandBaseColor}" po:Freeze="True" />
-  <SolidColorBrush x:Key="IslandElevatedBrush" Color="{StaticResource IslandElevatedColor}" po:Freeze="True" />
-  <SolidColorBrush x:Key="IslandHoverBrush" Color="{StaticResource IslandHoverColor}" po:Freeze="True" />
-  <SolidColorBrush x:Key="IslandBorderBrush" Color="{StaticResource IslandBorderColor}" po:Freeze="True" />
-  <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource TextPrimaryColor}" po:Freeze="True" />
-  <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource TextSecondaryColor}" po:Freeze="True" />
-  <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource TextMutedColor}" po:Freeze="True" />
-  <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" po:Freeze="True" />
-  <SolidColorBrush x:Key="SoulCyanBrush" Color="{StaticResource SoulCyanColor}" po:Freeze="True" />
-  <SolidColorBrush x:Key="SoulVioletBrush" Color="{StaticResource SoulVioletColor}" po:Freeze="True" />
-  <SolidColorBrush x:Key="SoulEmeraldBrush" Color="{StaticResource SoulEmeraldColor}" po:Freeze="True" />
-  <SolidColorBrush x:Key="SoulAmberBrush" Color="{StaticResource SoulAmberColor}" po:Freeze="True" />
-  <SolidColorBrush x:Key="SoulCrimsonBrush" Color="{StaticResource SoulCrimsonColor}" po:Freeze="True" />
+  <!-- Quiet Focus Visual -->
+  <Style x:Key="QuietFocusVisual">
+    <Setter Property="Control.Template">
+      <Setter.Value>
+        <ControlTemplate>
+          <Rectangle Margin="-2"
+                     Stroke="{StaticResource AccentBrush}"
+                     StrokeThickness="2"
+                     RadiusX="8"
+                     RadiusY="8"
+                     StrokeDashArray="1 0" />
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
 
-  <!-- Frozen flat surfaces keep the interface crisp without per-control effects. -->
-  <SolidColorBrush x:Key="IslandGlassBrush" Color="#FF0B0C10" po:Freeze="True" />
-  <SolidColorBrush x:Key="IslandSpecularBorderBrush" Color="#38FFFFFF" po:Freeze="True" />
-  <SolidColorBrush x:Key="GlassCardBrush" Color="#FF111318" po:Freeze="True" />
-  <SolidColorBrush x:Key="GlassCardHoverBrush" Color="#FF1A1C22" po:Freeze="True" />
-  <SolidColorBrush x:Key="GlassCardBorderBrush" Color="#24FFFFFF" po:Freeze="True" />
-  <SolidColorBrush x:Key="GlassCardBorderHoverBrush" Color="#40FFFFFF" po:Freeze="True" />
-  <SolidColorBrush x:Key="AccentGlassBrush" Color="#24FF6B6B" po:Freeze="True" />
-  <SolidColorBrush x:Key="AccentBorderBrush" Color="#70FF6B6B" po:Freeze="True" />
-  <SolidColorBrush x:Key="TabPillActiveBrush" Color="#20FF6B6B" po:Freeze="True" />
+  <!-- Button Hierarchy: Primary, Secondary, Ghost -->
+  <Style x:Key="PrimaryButton" TargetType="Button">
+    <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+    <Setter Property="Foreground" Value="{StaticResource TextOnAccentBrush}" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Height" Value="32" />
+    <Setter Property="Padding" Value="12,0" />
+    <Setter Property="FontFamily" Value="{StaticResource AppFontFamily}" />
+    <Setter Property="FontSize" Value="{StaticResource FontSizeBodySmall}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="SnapsToDevicePixels" Value="True" />
+    <Setter Property="FocusVisualStyle" Value="{StaticResource QuietFocusVisual}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Button">
+          <Border x:Name="border"
+                  Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  CornerRadius="{StaticResource ControlRadius}"
+                  Padding="{TemplateBinding Padding}"
+                  SnapsToDevicePixels="True"
+                  RenderTransformOrigin="0.5,0.5">
+            <Border.RenderTransform>
+              <ScaleTransform ScaleX="1.0" ScaleY="1.0" />
+            </Border.RenderTransform>
+            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="border" Property="Opacity" Value="0.92" />
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+              <Setter TargetName="border" Property="RenderTransform">
+                <Setter.Value>
+                  <ScaleTransform ScaleX="0.97" ScaleY="0.97" />
+                </Setter.Value>
+              </Setter>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter TargetName="border" Property="Opacity" Value="0.38" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style x:Key="SecondaryButton" TargetType="Button">
+    <Setter Property="Background" Value="{StaticResource Surface2Brush}" />
+    <Setter Property="Foreground" Value="{StaticResource Text1Brush}" />
+    <Setter Property="BorderBrush" Value="{StaticResource StrokeSubtleBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="Height" Value="32" />
+    <Setter Property="Padding" Value="12,0" />
+    <Setter Property="FontFamily" Value="{StaticResource AppFontFamily}" />
+    <Setter Property="FontSize" Value="{StaticResource FontSizeBodySmall}" />
+    <Setter Property="FontWeight" Value="Medium" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="SnapsToDevicePixels" Value="True" />
+    <Setter Property="FocusVisualStyle" Value="{StaticResource QuietFocusVisual}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Button">
+          <Border x:Name="border"
+                  Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  CornerRadius="{StaticResource ControlRadius}"
+                  Padding="{TemplateBinding Padding}"
+                  SnapsToDevicePixels="True"
+                  RenderTransformOrigin="0.5,0.5">
+            <Border.RenderTransform>
+              <ScaleTransform ScaleX="1.0" ScaleY="1.0" />
+            </Border.RenderTransform>
+            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="border" Property="Background" Value="{StaticResource Surface3Brush}" />
+              <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource StrokeStrongBrush}" />
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+              <Setter TargetName="border" Property="RenderTransform">
+                <Setter.Value>
+                  <ScaleTransform ScaleX="0.97" ScaleY="0.97" />
+                </Setter.Value>
+              </Setter>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter TargetName="border" Property="Opacity" Value="0.38" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style x:Key="GhostButton" TargetType="Button">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{StaticResource Text2Brush}" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Height" Value="32" />
+    <Setter Property="Padding" Value="10,0" />
+    <Setter Property="FontFamily" Value="{StaticResource AppFontFamily}" />
+    <Setter Property="FontSize" Value="{StaticResource FontSizeBodySmall}" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="SnapsToDevicePixels" Value="True" />
+    <Setter Property="FocusVisualStyle" Value="{StaticResource QuietFocusVisual}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Button">
+          <Border x:Name="border"
+                  Background="{TemplateBinding Background}"
+                  CornerRadius="{StaticResource ControlRadius}"
+                  Padding="{TemplateBinding Padding}"
+                  SnapsToDevicePixels="True"
+                  RenderTransformOrigin="0.5,0.5">
+            <Border.RenderTransform>
+              <ScaleTransform ScaleX="1.0" ScaleY="1.0" />
+            </Border.RenderTransform>
+            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="border" Property="Background" Value="{StaticResource Surface2Brush}" />
+              <Setter Property="Foreground" Value="{StaticResource Text1Brush}" />
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+              <Setter TargetName="border" Property="RenderTransform">
+                <Setter.Value>
+                  <ScaleTransform ScaleX="0.97" ScaleY="0.97" />
+                </Setter.Value>
+              </Setter>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter TargetName="border" Property="Opacity" Value="0.38" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
 
   <!-- Bento Glass Card Style -->
   <Style x:Key="GlassCard" TargetType="Border">

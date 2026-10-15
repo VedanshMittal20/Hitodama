@@ -40,6 +40,12 @@ public sealed class SpringValue
 
         return true;
     }
+
+    public void Reset(double value)
+    {
+        Current = Target = value;
+        Velocity = 0;
+    }
 }
 
 public sealed class IslandAnimator

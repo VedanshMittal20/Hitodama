@@ -52,7 +52,7 @@ public sealed class BuiltInToolsTests : IDisposable
         using var args = JsonDocument.Parse("""
             {
               "command": "cmd.exe",
-              "arguments": "/c echo HitodamaRockSolid"
+              "arguments": "/c echo VoidRockSolid"
             }
             """);
 
@@ -61,7 +61,7 @@ public sealed class BuiltInToolsTests : IDisposable
 
         // Assert
         result.Success.Should().BeTrue();
-        result.Output.Should().Contain("HitodamaRockSolid");
+        result.Output.Should().Contain("VoidRockSolid");
         result.Output.Should().Contain("ExitCode: 0");
     }
 
@@ -70,8 +70,8 @@ public sealed class BuiltInToolsTests : IDisposable
     {
         // Arrange
         var tool = new FileReadWriteTool();
-        string testFilePath = _scope.CreateFilePath("hitodama_notes.txt");
-        const string testContent = "Hitodama desktop companion file tool test content.\nLine 2";
+        string testFilePath = _scope.CreateFilePath("void_notes.txt");
+        const string testContent = "Void desktop companion file tool test content.\nLine 2";
 
         // Act 1: write_text
         using (var writeArgs = JsonDocument.Parse(JsonSerializer.Serialize(new
@@ -118,7 +118,7 @@ public sealed class BuiltInToolsTests : IDisposable
         {
             var listResult = await tool.ExecuteAsync(listArgs.RootElement, ToolExecutionContext.Trusted());
             listResult.Success.Should().BeTrue();
-            listResult.Output.Should().Contain("hitodama_notes.txt");
+            listResult.Output.Should().Contain("void_notes.txt");
         }
     }
 
@@ -152,7 +152,7 @@ public sealed class BuiltInToolsTests : IDisposable
         var tool = new WebSearchTool(gatekeeper);
         using var searchArgs = JsonDocument.Parse("""
             {
-              "query": "Hitodama voice assistant architecture"
+              "query": "Void voice assistant architecture"
             }
             """);
 

@@ -35,7 +35,7 @@ public sealed class DatabaseBoundaryTests : IDisposable
     public void FTS5_AdversarialSpecialCharacters_AreSanitizedAndDoNotThrow(string maliciousQuery)
     {
         // Arrange
-        _sut.AddMemory("Hitodama desktop companion with C# 12 & .NET 8 WPF", "tags:test");
+        _sut.AddMemory("Void desktop companion with C# 12 & .NET 8 WPF", "tags:test");
 
         // Act & Assert
         Action act = () => _sut.SearchMemoriesFts(maliciousQuery);

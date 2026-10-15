@@ -103,8 +103,12 @@ public sealed class GlobalInputService : IDisposable
         _hook = SetWindowsHookEx(WhKeyboardLl, _hookCallback, GetModuleHandle(null), 0);
         if (_hook == IntPtr.Zero)
         {
-            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+            var exception = new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+            SafeDiagnostics.WriteFailure("input", "hook-start", exception);
+            throw exception;
         }
+
+        SafeDiagnostics.WriteEvent("input", "hook-started");
     }
 
     private IntPtr OnKeyboardEvent(int code, IntPtr wParam, IntPtr lParam)
@@ -151,10 +155,12 @@ public sealed class GlobalInputService : IDisposable
                     if (key == VkSpace && IsControlDown() && IsAltDown())
                     {
                         callback = AssistantHotkeyPressed;
+                        SafeDiagnostics.WriteEvent("input", "assistant-hotkey");
                     }
                     else if (key == VkBackspace && IsControlDown() && IsAltDown())
                     {
                         callback = KillSwitchPressed;
+                        SafeDiagnostics.WriteEvent("input", "kill-switch-hotkey");
                     }
 
                     UpdateHoldTimer();
@@ -180,12 +186,14 @@ public sealed class GlobalInputService : IDisposable
                 {
                     _circleActive = false;
                     callback += CircleToAskReleased;
+                    SafeDiagnostics.WriteEvent("input", "circle-chord-released");
                 }
 
                 if (_dictationActive && (controlReleased || windowsReleased))
                 {
                     _dictationActive = false;
                     callback += DictationReleased;
+                    SafeDiagnostics.WriteEvent("input", "dictation-chord-released");
                 }
 
                 if (!IsCircleChordDown() && !_circleActive && !_dictationActive)
@@ -247,11 +255,13 @@ public sealed class GlobalInputService : IDisposable
             {
                 _circleActive = true;
                 callback = CircleToAskStarted;
+                SafeDiagnostics.WriteEvent("input", "circle-chord-started");
             }
             else if (IsDictationChordDown() && !_dictationCancelled)
             {
                 _dictationActive = true;
                 callback = DictationStarted;
+                SafeDiagnostics.WriteEvent("input", "dictation-chord-started");
             }
         }
 

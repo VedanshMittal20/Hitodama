@@ -5,6 +5,9 @@
     <WindowsSdkPackageVersion>10.0.19041.56</WindowsSdkPackageVersion>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationIcon>..\Companion.Shell\Resources\void.ico</ApplicationIcon>
+    <AssemblyTitle>Void Studio</AssemblyTitle>
+    <Product>Void</Product>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -13,5 +16,10 @@
   <ItemGroup>
     <ProjectReference Include="..\Companion.Core\Companion.Core.csproj" />
     <ProjectReference Include="..\Companion.Services\Companion.Services.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\Companion.Shell\Controls\SoulOrbControl.cs" Link="Controls\SoulOrbControl.cs" />
+    <Page Include="..\Companion.Shell\Resources\Tokens.xaml" Link="Resources\Tokens.xaml" />
+    <Resource Include="..\Companion.Shell\Resources\void-logo.png" Link="Resources\void-logo.png" />
   </ItemGroup>
 </Project>

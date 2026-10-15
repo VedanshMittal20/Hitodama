@@ -23,7 +23,7 @@ public sealed class GeminiVisionService
         }
 
         string apiKey = SecretStore.LoadApiKey()
-            ?? throw new InvalidOperationException("Add a Gemini API key in Hitodama Studio before using Circle to Ask.");
+            ?? throw new InvalidOperationException("Add a Gemini API key in Void Studio before using Circle to Ask.");
         string endpoint =
             $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={Uri.EscapeDataString(apiKey)}";
         var payload = new
@@ -34,7 +34,7 @@ public sealed class GeminiVisionService
                 {
                     new
                     {
-                        text = "You are Hitodama, a concise desktop assistant. Answer the user's spoken question using the attached screenshot as context. Do not claim to see anything outside the image."
+                        text = "You are Void, a concise desktop assistant. Answer the user's spoken question using the attached screenshot as context. Do not claim to see anything outside the image."
                     }
                 }
             },

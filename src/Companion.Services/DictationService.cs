@@ -120,7 +120,7 @@ public sealed class DictationService : IDisposable
             }
 
             string apiKey = SecretStore.LoadApiKey()
-                ?? throw new InvalidOperationException("Add a Gemini API key in Hitodama Studio before using dictation.");
+                ?? throw new InvalidOperationException("Add a Gemini API key in Void Studio before using dictation.");
             string cleanedText = await TranscribeAndCleanAsync(apiKey, audio, operation.Token);
             operation.Token.ThrowIfCancellationRequested();
             if (string.IsNullOrWhiteSpace(cleanedText))
