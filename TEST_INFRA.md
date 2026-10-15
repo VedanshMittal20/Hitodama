@@ -22,7 +22,7 @@ This document defines the architecture, conventions, execution commands, and gui
 The test suite resides in a dedicated test project added to `Companion.sln`:
 
 ```
-c:\Users\vedan\OneDrive\Desktop\Void\
+<repository root>\
 ├── Companion.sln
 ├── src\
 │   ├── Companion.Core\

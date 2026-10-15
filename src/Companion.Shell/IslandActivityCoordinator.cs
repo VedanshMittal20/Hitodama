@@ -81,7 +81,6 @@ public sealed class IslandActivityCoordinator : IDisposable
         string detail,
         TimeSpan? lifetime = null)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         ArgumentNullException.ThrowIfNull(title);
         ArgumentNullException.ThrowIfNull(detail);
@@ -95,6 +94,7 @@ public sealed class IslandActivityCoordinator : IDisposable
         IslandActivity activity;
         lock (_sync)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             previous = SelectCurrent();
             RemoveExpired(DateTimeOffset.UtcNow);
             activity = new IslandActivity(
@@ -121,6 +121,7 @@ public sealed class IslandActivityCoordinator : IDisposable
         bool removed;
         lock (_sync)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             previous = SelectCurrent();
             RemoveExpired(DateTimeOffset.UtcNow);
             removed = _activities.Remove(id);
@@ -143,6 +144,11 @@ public sealed class IslandActivityCoordinator : IDisposable
         IslandActivity? current;
         lock (_sync)
         {
+            if (_disposed)
+            {
+                return;
+            }
+
             previous = SelectCurrent();
             RemoveExpired(DateTimeOffset.UtcNow);
             ScheduleNextExpiry();
@@ -199,16 +205,17 @@ public sealed class IslandActivityCoordinator : IDisposable
 
     public void Dispose()
     {
-        if (_disposed)
-        {
-            return;
-        }
-
-        _disposed = true;
-        _expiryTimer.Dispose();
         lock (_sync)
         {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
             _activities.Clear();
         }
+
+        _expiryTimer.Dispose();
     }
 }

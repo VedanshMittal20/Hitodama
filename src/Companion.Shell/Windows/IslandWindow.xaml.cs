@@ -2853,6 +2853,8 @@ public partial class IslandWindow : Window
             await _scheduler.DisposeAsync();
         }
 
+        _activityCoordinator.CurrentActivityChanged -= OnCurrentActivityChanged;
+        _activityCoordinator.Dispose();
         await _ipcServer.DisposeAsync();
     }
 

@@ -62,7 +62,8 @@ public static class AppPaths
     {
         string target = Path.Combine(parentDirectory, "VoidCompanion");
         string legacy = Path.Combine(parentDirectory, "HitodamaCompanion");
-        if (Directory.Exists(target) || !Directory.Exists(legacy))
+        bool targetExists = Directory.Exists(target);
+        if (!Directory.Exists(legacy))
         {
             return target;
         }
@@ -70,7 +71,7 @@ public static class AppPaths
         // Keep using the original location while an older process may still be writing to it.
         if (IsExistingShellInstance())
         {
-            return legacy;
+            return targetExists ? target : legacy;
         }
 
         string staging = target + ".migration-" + Guid.NewGuid().ToString("N");
@@ -86,6 +87,7 @@ public static class AppPaths
             {
                 if (Directory.Exists(target))
                 {
+                    CopyMissingFiles(legacy, target);
                     return target;
                 }
 
@@ -134,16 +136,52 @@ public static class AppPaths
     private static void CopyDirectory(string source, string destination)
     {
         Directory.CreateDirectory(destination);
-        foreach (string file in Directory.EnumerateFiles(source))
+        foreach (FileInfo file in new DirectoryInfo(source).EnumerateFiles())
         {
-            string target = Path.Combine(destination, Path.GetFileName(file));
-            File.Copy(file, target, overwrite: false);
+            if ((file.Attributes & FileAttributes.ReparsePoint) != 0)
+            {
+                continue;
+            }
+
+            string target = Path.Combine(destination, file.Name);
+            File.Copy(file.FullName, target, overwrite: false);
         }
 
-        foreach (string child in Directory.EnumerateDirectories(source))
+        foreach (DirectoryInfo child in new DirectoryInfo(source).EnumerateDirectories())
         {
-            string target = Path.Combine(destination, Path.GetFileName(child));
-            CopyDirectory(child, target);
+            if ((child.Attributes & FileAttributes.ReparsePoint) != 0)
+            {
+                continue;
+            }
+
+            string target = Path.Combine(destination, child.Name);
+            CopyDirectory(child.FullName, target);
+        }
+    }
+
+    private static void CopyMissingFiles(string source, string destination)
+    {
+        Directory.CreateDirectory(destination);
+        foreach (FileInfo file in new DirectoryInfo(source).EnumerateFiles())
+        {
+            if ((file.Attributes & FileAttributes.ReparsePoint) != 0)
+            {
+                continue;
+            }
+
+            string target = Path.Combine(destination, file.Name);
+            if (!File.Exists(target))
+            {
+                File.Copy(file.FullName, target, overwrite: false);
+            }
+        }
+
+        foreach (DirectoryInfo child in new DirectoryInfo(source).EnumerateDirectories())
+        {
+            if ((child.Attributes & FileAttributes.ReparsePoint) == 0)
+            {
+                CopyMissingFiles(child.FullName, Path.Combine(destination, child.Name));
+            }
         }
     }
 
