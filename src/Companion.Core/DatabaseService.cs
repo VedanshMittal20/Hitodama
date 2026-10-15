@@ -34,7 +34,41 @@ public sealed class DatabaseService : IDatabaseService
             DefaultTimeout = BusyTimeoutMilliseconds / 1000
         }.ToString();
 
-        Initialize();
+        try
+        {
+            Initialize();
+        }
+        catch (SqliteException ex) when (ex.SqliteErrorCode is 11 or 26)
+        {
+            RecoverCorruptDatabase(path);
+            Initialize();
+        }
+    }
+
+    private static void RecoverCorruptDatabase(string path)
+    {
+        try
+        {
+            SqliteConnection.ClearAllPools();
+            string timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture);
+            string backupPath = $"{path}.corrupt_{timestamp}";
+            if (File.Exists(path))
+            {
+                File.Move(path, backupPath, overwrite: true);
+            }
+            if (File.Exists($"{path}-wal"))
+            {
+                File.Delete($"{path}-wal");
+            }
+            if (File.Exists($"{path}-shm"))
+            {
+                File.Delete($"{path}-shm");
+            }
+        }
+        catch
+        {
+            // Best effort cleanup
+        }
     }
 
     // Memories CRUD
