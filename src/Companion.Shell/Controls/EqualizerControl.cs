@@ -1,0 +1,188 @@
+using System.Diagnostics;
+using System.Windows;
+using System.Windows.Media;
+using Companion.Services;
+using Brush = System.Windows.Media.Brush;
+using Color = System.Windows.Media.Color;
+
+namespace Companion.Shell.Controls;
+
+public sealed class EqualizerControl : FrameworkElement
+{
+    private static readonly Brush BarBrush = new SolidColorBrush(Color.FromRgb(56, 189, 248)); // SoulCyan
+
+    static EqualizerControl()
+    {
+        BarBrush.Freeze();
+    }
+
+    private readonly SpringValue[] _barSprings =
+    [
+        new(3.0, omega: 24.0, zeta: 0.70),
+        new(3.0, omega: 26.0, zeta: 0.68),
+        new(3.0, omega: 22.0, zeta: 0.72),
+        new(3.0, omega: 25.0, zeta: 0.69)
+    ];
+
+    private readonly Stopwatch _clock = new();
+    private TimeSpan _lastTime;
+    private bool _isAnimating;
+    private bool _isPlaying;
+    private double _audioLevel;
+
+    public static readonly DependencyProperty IsPlayingProperty =
+        DependencyProperty.Register(
+            nameof(IsPlaying),
+            typeof(bool),
+            typeof(EqualizerControl),
+            new PropertyMetadata(false, OnIsPlayingChanged));
+
+    public bool IsPlaying
+    {
+        get => (bool)GetValue(IsPlayingProperty);
+        set => SetValue(IsPlayingProperty, value);
+    }
+
+    public double AudioLevel
+    {
+        get => _audioLevel;
+        set
+        {
+            _audioLevel = Math.Clamp(value, 0.0, 1.0);
+            if (_isPlaying)
+            {
+                EnsureAnimation();
+            }
+        }
+    }
+
+    public EqualizerControl()
+    {
+        Width = 24;
+        Height = 18;
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
+    }
+
+    private static void OnIsPlayingChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is EqualizerControl control)
+        {
+            control._isPlaying = (bool)e.NewValue;
+            control.EnsureAnimation();
+        }
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        EnsureAnimation();
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        StopAnimation();
+    }
+
+    private void EnsureAnimation()
+    {
+        if (!IsLoaded)
+        {
+            return;
+        }
+
+        if (_isPlaying || _barSprings.Any(s => Math.Abs(s.Current - 3.0) > 0.05 || Math.Abs(s.Velocity) > 0.05))
+        {
+            if (!_isAnimating)
+            {
+                _isAnimating = true;
+                _clock.Restart();
+                _lastTime = TimeSpan.Zero;
+                CompositionTarget.Rendering += OnRendering;
+            }
+        }
+    }
+
+    private void StopAnimation()
+    {
+        if (_isAnimating)
+        {
+            _isAnimating = false;
+            _clock.Stop();
+            CompositionTarget.Rendering -= OnRendering;
+        }
+    }
+
+    private void OnRendering(object? sender, EventArgs e)
+    {
+        var now = _clock.Elapsed;
+        double dt = Math.Clamp((now - _lastTime).TotalSeconds, 0.001, 0.050);
+        _lastTime = now;
+        double seconds = now.TotalSeconds;
+
+        double maxHeight = Math.Max(12.0, ActualHeight > 0 ? ActualHeight : 18.0);
+        double minHeight = 3.0;
+
+        if (_isPlaying)
+        {
+            // Dynamic multi-harmonic frequencies for 4 bars
+            double wave1 = (Math.Sin(seconds * 7.3) + 1.0) * 0.5;
+            double wave2 = (Math.Sin(seconds * 11.1 + 1.2) + 1.0) * 0.5;
+            double wave3 = (Math.Sin(seconds * 8.9 + 2.5) + 1.0) * 0.5;
+            double wave4 = (Math.Sin(seconds * 13.4 + 0.7) + 1.0) * 0.5;
+
+            double boost = Math.Max(_audioLevel, 0.25);
+            _barSprings[0].Target = minHeight + (maxHeight - minHeight) * (wave1 * 0.7 + boost * 0.3);
+            _barSprings[1].Target = minHeight + (maxHeight - minHeight) * (wave2 * 0.6 + boost * 0.4);
+            _barSprings[2].Target = minHeight + (maxHeight - minHeight) * (wave3 * 0.8 + boost * 0.2);
+            _barSprings[3].Target = minHeight + (maxHeight - minHeight) * (wave4 * 0.5 + boost * 0.5);
+        }
+        else
+        {
+            for (int i = 0; i < _barSprings.Length; i++)
+            {
+                _barSprings[i].Target = minHeight;
+            }
+        }
+
+        bool anyActive = false;
+        foreach (var spring in _barSprings)
+        {
+            if (spring.Step(dt))
+            {
+                anyActive = true;
+            }
+        }
+
+        InvalidateVisual();
+
+        if (!anyActive && !_isPlaying)
+        {
+            StopAnimation();
+        }
+    }
+
+    protected override void OnRender(DrawingContext dc)
+    {
+        base.OnRender(dc);
+
+        double w = ActualWidth > 0 ? ActualWidth : 24.0;
+        double h = ActualHeight > 0 ? ActualHeight : 18.0;
+
+        const double barWidth = 3.0;
+        const double barSpacing = 2.5;
+        const double radius = 1.5;
+
+        double totalBarsWidth = (4 * barWidth) + (3 * barSpacing);
+        double startX = (w - totalBarsWidth) / 2.0;
+
+        for (int i = 0; i < 4; i++)
+        {
+            double barHeight = Math.Clamp(_barSprings[i].Current, 2.0, h);
+            double x = startX + i * (barWidth + barSpacing);
+            double y = h - barHeight;
+
+            var rect = new Rect(x, y, barWidth, barHeight);
+            dc.DrawRoundedRectangle(BarBrush, null, rect, radius, radius);
+        }
+    }
+}

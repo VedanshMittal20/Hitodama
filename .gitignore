@@ -494,3 +494,4 @@ $RECYCLE.BIN/
 /build-core.log
 /build-solution.log
 /build-solution-diag.log
+/.agents/

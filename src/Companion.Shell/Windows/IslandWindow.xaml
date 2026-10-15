@@ -1,0 +1,461 @@
+<Window x:Class="Companion.Shell.Windows.IslandWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:Companion.Shell.Controls"
+        Title="Hitodama" Width="720" Height="520" Top="0"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        Topmost="True" ShowInTaskbar="False" ResizeMode="NoResize" ShowActivated="False"
+        UseLayoutRounding="True" SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="ClearType"
+        PreviewKeyDown="OnIslandPreviewKeyDown"
+        PreviewMouseWheel="OnPreviewMouseWheel">
+  <Grid x:Name="WindowRoot" Background="Transparent">
+    <!-- Main Dynamic Island Pill Container with Specular Liquid-Glass Doppelrand -->
+    <Border x:Name="IslandContainer" Width="164" Height="36"
+            HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,8,0,0"
+            Background="{StaticResource IslandGlassBrush}"
+            BorderBrush="{StaticResource IslandSpecularBorderBrush}" BorderThickness="1"
+            CornerRadius="18" Padding="12,4" ClipToBounds="True"
+            Cursor="Hand" ToolTip="Click or scroll down to open Hitodama dock"
+            PreviewMouseLeftButtonUp="OnIslandMouseLeftButtonUp">
+      <Border.RenderTransform>
+        <TranslateTransform x:Name="IslandNudgeTransform" X="0" Y="0" />
+      </Border.RenderTransform>
+      <Grid>
+        <!-- 1. Collapsed Pill State (164 x 36) -->
+        <StackPanel x:Name="CollapsedContent" Orientation="Horizontal"
+                    HorizontalAlignment="Center" VerticalAlignment="Center">
+          <controls:SoulOrbControl x:Name="CollapsedSoul" Width="20" Height="20" Margin="0,0,7,0" VerticalAlignment="Center" />
+          <TextBlock x:Name="CollapsedSoulName" Text="Hitodama" Foreground="{StaticResource TextPrimaryBrush}"
+                     FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"
+                     FontFamily="Segoe UI Variable Display, Segoe UI, sans-serif" />
+          <TextBlock x:Name="ClockDivider" Text="·" Foreground="{StaticResource TextMutedBrush}" FontSize="12"
+                     VerticalAlignment="Center" Margin="7,0,7,0" />
+          <TextBlock x:Name="ClockText" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"
+                     VerticalAlignment="Center"
+                     FontFamily="Segoe UI Variable Display, Segoe UI, sans-serif" />
+          <controls:EqualizerControl x:Name="CollapsedEqualizer" Margin="8,0,0,0" VerticalAlignment="Center"
+                                     Visibility="Collapsed" />
+        </StackPanel>
+
+        <!-- 2. Compact Live Notification & Live Voice State (360 x 56) -->
+        <Grid x:Name="CompactContent" Visibility="Collapsed" Margin="6,2">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <controls:SoulOrbControl x:Name="CompactSoul" Width="38" Height="38" Margin="2,0,12,0"
+                                     VerticalAlignment="Center" />
+            <Border x:Name="CompactCheckmarkBadge" Width="32" Height="32" CornerRadius="16"
+                    Background="#2534D399" BorderBrush="{StaticResource SemanticSuccessBrush}" BorderThickness="1.5"
+                    Margin="2,0,12,0" VerticalAlignment="Center" Visibility="Collapsed">
+              <TextBlock x:Name="CompactCheckmark" Text="✓" Foreground="{StaticResource SemanticSuccessBrush}"
+                         FontSize="16" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+          </StackPanel>
+          <StackPanel Grid.Column="1" VerticalAlignment="Center">
+            <TextBlock x:Name="CompactTitle" Text="Hitodama" Foreground="{StaticResource TextPrimaryBrush}"
+                       FontSize="13" FontWeight="SemiBold"
+                       FontFamily="Segoe UI Variable Display, Segoe UI, sans-serif" />
+            <TextBlock x:Name="CompactSubtitle" Text="Ready when you are"
+                       Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"
+                       TextWrapping="Wrap" MaxWidth="320" Margin="0,2,0,0"
+                       FontFamily="Segoe UI Variable Display, Segoe UI, sans-serif" />
+          </StackPanel>
+        </Grid>
+
+        <!-- 3. Permission Prompt Modal State (460 x 190) -->
+        <Grid x:Name="PermissionPromptContent" Visibility="Collapsed" Margin="8,6">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+          </Grid.RowDefinitions>
+          
+          <DockPanel LastChildFill="True">
+            <controls:SoulOrbControl x:Name="PermissionSoul" Width="26" Height="26" Margin="0,0,8,0" DockPanel.Dock="Left" VerticalAlignment="Center" />
+            <TextBlock x:Name="PermissionWarningTitle" Text="Security Confirmation Required"
+                       Foreground="{StaticResource SoulAmberBrush}" FontWeight="SemiBold" FontSize="12.5" VerticalAlignment="Center"
+                       FontFamily="Segoe UI Variable Display, Segoe UI, sans-serif" />
+          </DockPanel>
+
+          <Border Grid.Row="1" Background="{StaticResource GlassCardBrush}" BorderBrush="{StaticResource GlassCardBorderBrush}"
+                  BorderThickness="1" CornerRadius="10" Padding="10,8" Margin="0,8,0,8">
+            <StackPanel VerticalAlignment="Center">
+              <TextBlock x:Name="PermissionToolName" Text="Tool: Action"
+                         Foreground="{StaticResource TextPrimaryBrush}" FontWeight="SemiBold" FontSize="12" />
+              <TextBlock x:Name="PermissionDescription" Text="Action description"
+                         Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" TextWrapping="Wrap" MaxHeight="52" Margin="0,3,0,0" />
+              <TextBlock x:Name="PermissionArguments" Foreground="{StaticResource TextMutedBrush}"
+                         FontSize="9.5" TextWrapping="Wrap" MaxHeight="38" TextTrimming="CharacterEllipsis" Margin="0,3,0,0"
+                         FontFamily="Cascadia Code, Consolas, monospace" />
+              <TextBlock x:Name="PermissionContextAlert" Text="Context: Untrusted external request"
+                         Foreground="{StaticResource SoulCrimsonBrush}" FontSize="10" FontWeight="SemiBold" Margin="0,3,0,0" Visibility="Collapsed" />
+            </StackPanel>
+          </Border>
+
+          <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button x:Name="PermissionDenyButton" Content="Deny" Click="OnPermissionDenyClick"
+                    Background="{StaticResource GlassCardBrush}" Foreground="{StaticResource SoulCrimsonBrush}"
+                    BorderBrush="#44F87171" FontWeight="SemiBold"
+                    Padding="14,6" Margin="0,0,8,0" Style="{StaticResource TileButton}" />
+            <Button x:Name="PermissionAllowButton" Content="Allow" Click="OnPermissionAllowClick"
+                    Background="{StaticResource SoulEmeraldBrush}" Foreground="#FF09090D" FontWeight="SemiBold"
+                    BorderThickness="0" Padding="16,6" Style="{StaticResource TileButton}" />
+          </StackPanel>
+        </Grid>
+
+        <!-- 4. Expanded Dock State (640 x 390) -->
+        <Grid x:Name="ExpandedContent" Visibility="Collapsed" Opacity="0" Margin="4,2">
+          <Grid.RenderTransform>
+            <TranslateTransform x:Name="ExpandedSlideTransform" X="0" Y="10" />
+          </Grid.RenderTransform>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+          </Grid.RowDefinitions>
+
+          <!-- Top Navigation & Island Titlebar -->
+          <DockPanel LastChildFill="False" Margin="2,2,2,10">
+            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+              <controls:SoulOrbControl x:Name="ExpandedSoul" Width="28" Height="28" Margin="0,0,9,0" VerticalAlignment="Center" />
+              <StackPanel VerticalAlignment="Center">
+                <TextBlock x:Name="ExpandedSoulName" Text="Hitodama" Foreground="{StaticResource TextPrimaryBrush}"
+                           FontSize="13.5" FontWeight="SemiBold"
+                           FontFamily="Segoe UI Variable Display, Segoe UI, sans-serif" />
+                <TextBlock x:Name="CurrentTabLabel" Text="Controls" Foreground="{StaticResource SoulCyanBrush}"
+                           FontSize="10" FontWeight="SemiBold" Margin="0,1,0,0"
+                           FontFamily="Segoe UI Variable Display, Segoe UI, sans-serif" />
+              </StackPanel>
+            </StackPanel>
+            
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+              <Button Content="Shape" Click="OnStudioClick" Margin="0,0,6,0" Padding="10,4"
+                      ToolTip="Shape your Hitodama in Studio" />
+              <Button Content="×" Width="26" Height="26" Padding="0" FontSize="14"
+                      Click="OnCollapseClick" ToolTip="Collapse island" />
+            </StackPanel>
+          </DockPanel>
+
+          <!-- Dock Body -->
+          <Grid Grid.Row="1">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="32" />
+              <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- Floating Glass Segment Tab Controller -->
+            <Border Grid.Row="0" Background="#14141E"
+                    BorderBrush="{StaticResource GlassCardBorderBrush}" BorderThickness="1"
+                    CornerRadius="10" Padding="2" Margin="0,0,0,2">
+              <UniformGrid x:Name="TabBar" Columns="7">
+                <Button Content="Controls" Tag="0" Click="OnTabClick" Style="{StaticResource TabPillButton}" />
+                <Button Content="Today" Tag="1" Click="OnTabClick" Style="{StaticResource TabPillButton}" />
+                <Button Content="Stats" Tag="2" Click="OnTabClick" Style="{StaticResource TabPillButton}" />
+                <Button Content="Clipboard" Tag="3" Click="OnTabClick" Style="{StaticResource TabPillButton}" />
+                <Button Content="Apps" Tag="4" Click="OnTabClick" Style="{StaticResource TabPillButton}" />
+                <Button Content="Wallpaper" Tag="5" Click="OnTabClick" Style="{StaticResource TabPillButton}" />
+                <Button Content="Power" Tag="6" Click="OnTabClick" Style="{StaticResource TabPillButton}" />
+              </UniformGrid>
+            </Border>
+
+            <!-- Tab Pages Content Stack -->
+            <Grid x:Name="TabContent" Grid.Row="1" Margin="0,8,0,0">
+              
+              <!-- TAB 0: Controls -->
+              <ScrollViewer x:Name="TabScroller" VerticalScrollBarVisibility="Auto">
+                <StackPanel x:Name="PageControls" Margin="0,0,2,0">
+                  <TextBlock Text="Desktop controls" Style="{StaticResource SectionTitle}" />
+                  <UniformGrid Columns="3" Rows="2" Margin="0,8,0,0">
+                    <Button x:Name="WifiTileButton" Content="Wi-Fi&#10;Network settings" Tag="ms-settings:network-wifi"
+                            Click="OnWifiToggleClick" Style="{StaticResource TileButton}" />
+                    <Button x:Name="BluetoothTileButton" Content="Bluetooth&#10;Loading..."
+                            Click="OnBluetoothToggleClick" Style="{StaticResource TileButton}" />
+                    <Button Content="Night light&#10;Display settings" Tag="ms-settings:display"
+                            Click="OnSettingsClick" Style="{StaticResource TileButton}" />
+                    <Button x:Name="DarkModeButton" Content="Dark mode" Click="OnDarkModeToggleClick"
+                            Style="{StaticResource TileButton}" />
+                    <Border Background="{StaticResource GlassCardBrush}" BorderBrush="{StaticResource GlassCardBorderBrush}"
+                            BorderThickness="1" CornerRadius="12" Padding="10,8" Margin="4">
+                      <StackPanel VerticalAlignment="Center">
+                        <TextBlock x:Name="AudioDeviceLabel" Text="Default audio" Foreground="{StaticResource TextPrimaryBrush}"
+                                   FontSize="10" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                        <DockPanel Margin="0,5,0,0">
+                          <TextBlock x:Name="VolumeValueText" DockPanel.Dock="Right" Foreground="{StaticResource SoulCyanBrush}"
+                                     FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" Margin="6,0,0,0" />
+                          <Slider x:Name="MasterVolumeSlider" Minimum="0" Maximum="100" IsMoveToPointEnabled="True"
+                                  ValueChanged="OnMasterVolumeChanged" />
+                        </DockPanel>
+                      </StackPanel>
+                    </Border>
+                    <Button Content="Media&#10;Volume settings" Tag="ms-settings:apps-volume"
+                            Click="OnSettingsClick" Style="{StaticResource TileButton}" />
+                  </UniformGrid>
+
+                  <!-- GSMTC Music Island Card with Doppelrand Architecture & Dynamic Glow -->
+                  <Border x:Name="MusicIslandCard" Margin="4,10,4,4" Background="{StaticResource GlassCardBrush}"
+                          BorderBrush="{StaticResource GlassCardBorderBrush}" BorderThickness="1" CornerRadius="16" Padding="14,12">
+                    <Grid>
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                      </Grid.ColumnDefinitions>
+                      <Border Width="48" Height="48" Margin="0,0,12,0" CornerRadius="10"
+                              Background="{StaticResource IslandElevatedBrush}" BorderBrush="{StaticResource GlassCardBorderBrush}"
+                              BorderThickness="1" ClipToBounds="True">
+                        <Grid>
+                          <TextBlock x:Name="MusicAlbumArtPlaceholder" Text="♫" Foreground="{StaticResource TextMutedBrush}"
+                                     FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                          <Image x:Name="MusicAlbumArt" Stretch="UniformToFill" />
+                        </Grid>
+                      </Border>
+                      <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock x:Name="MusicTitleText" Text="No media playing"
+                                   Foreground="{StaticResource TextPrimaryBrush}" FontSize="12.5" FontWeight="SemiBold"
+                                   TextTrimming="CharacterEllipsis" />
+                        <DockPanel Margin="0,3,0,0">
+                          <controls:EqualizerControl x:Name="ControlsEqualizer" DockPanel.Dock="Right"
+                                                     VerticalAlignment="Center" Margin="6,0,0,0" />
+                          <TextBlock x:Name="MusicArtistText" Text="Spotify · Apple Music · Browser"
+                                     Foreground="{StaticResource TextSecondaryBrush}" FontSize="10.5"
+                                     TextTrimming="CharacterEllipsis" />
+                        </DockPanel>
+                        <ProgressBar x:Name="MusicTimelineProgress" Minimum="0" Maximum="100" Height="3"
+                                     Margin="0,5,0,0" />
+                        <TextBlock x:Name="MusicTimelineText" Text="--:-- / --:--"
+                                   Foreground="{StaticResource TextMutedBrush}" FontSize="9" Margin="0,2,0,0"
+                                   FontFamily="Cascadia Code, Consolas, monospace" />
+                      </StackPanel>
+                      <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                        <Button Content="⏮" Width="30" Height="30" Padding="0" Margin="0,0,4,0"
+                                Click="OnMusicPrevClick" ToolTip="Previous track" />
+                        <Button x:Name="MusicPlayPauseButton" Content="▶" Width="34" Height="30" Padding="0" Margin="0,0,4,0"
+                                Foreground="{StaticResource SoulCyanBrush}"
+                                Click="OnMusicPlayPauseClick" ToolTip="Play / Pause" />
+                        <Button Content="⏭" Width="30" Height="30" Padding="0"
+                                Click="OnMusicNextClick" ToolTip="Next track" />
+                      </StackPanel>
+                    </Grid>
+                  </Border>
+                </StackPanel>
+              </ScrollViewer>
+
+              <!-- TAB 1: Today -->
+              <ScrollViewer x:Name="PageToday" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+                <StackPanel Margin="0,0,2,0">
+                  <TextBlock Text="Today" Style="{StaticResource SectionTitle}" />
+                  <TextBlock x:Name="TodoCounter" Foreground="{StaticResource TextSecondaryBrush}"
+                             FontSize="11" Margin="0,3,0,6" />
+                  <Border Background="{StaticResource GlassCardBrush}" BorderBrush="{StaticResource GlassCardBorderBrush}"
+                          BorderThickness="1" CornerRadius="12" Padding="6,4">
+                    <ListBox x:Name="TodoList" Background="Transparent" BorderThickness="0"
+                             Foreground="{StaticResource TextPrimaryBrush}" MaxHeight="145">
+                      <ListBox.ItemTemplate>
+                        <DataTemplate>
+                          <DockPanel Margin="4,3" LastChildFill="True">
+                            <Border DockPanel.Dock="Right" Background="#1838BDF8" BorderBrush="#3338BDF8"
+                                    BorderThickness="1" CornerRadius="6" Padding="6,2" Margin="6,0,0,0"
+                                    VerticalAlignment="Center"
+                                    Visibility="{Binding DueTimeText, Converter={StaticResource StringToVisibilityConverter}}">
+                              <TextBlock Text="{Binding DueTimeText}" Foreground="{StaticResource SoulCyanBrush}"
+                                         FontSize="9.5" FontWeight="SemiBold" />
+                            </Border>
+                            <CheckBox Content="{Binding Title}" IsChecked="{Binding IsCompleted}"
+                                      Tag="{Binding Id}" Checked="OnTodoCheckChanged"
+                                      Unchecked="OnTodoCheckChanged" VerticalAlignment="Center" />
+                          </DockPanel>
+                        </DataTemplate>
+                      </ListBox.ItemTemplate>
+                    </ListBox>
+                  </Border>
+                  
+                  <DockPanel Margin="0,8,0,0">
+                    <Button Content="Add" DockPanel.Dock="Right" Click="OnAddTodoClick" Margin="8,0,0,0" Padding="14,6" />
+                    <TextBox x:Name="TodoInput" ToolTip="Add a to-do item" />
+                  </DockPanel>
+
+                  <TextBlock Text="Scheduled app launches" Foreground="{StaticResource TextPrimaryBrush}"
+                             FontWeight="SemiBold" FontSize="12.5" Margin="0,14,0,4" />
+                  <DockPanel>
+                    <Button Content="Schedule" DockPanel.Dock="Right" Click="OnScheduleAppClick" Margin="8,0,0,0" Padding="12,6" />
+                    <TextBox x:Name="ScheduleAppInput" ToolTip="Start Menu app name" />
+                  </DockPanel>
+                  <DockPanel Margin="0,6,0,0">
+                    <TextBlock Text="in minutes:" DockPanel.Dock="Left" Foreground="{StaticResource TextSecondaryBrush}"
+                               VerticalAlignment="Center" Margin="0,0,8,0" FontSize="11" />
+                    <TextBox x:Name="ScheduleMinutesInput" Text="1" Width="60" HorizontalAlignment="Left" />
+                  </DockPanel>
+                  <Border Background="{StaticResource GlassCardBrush}" BorderBrush="{StaticResource GlassCardBorderBrush}"
+                          BorderThickness="1" CornerRadius="12" Padding="4" Margin="0,6,0,0">
+                    <ListBox x:Name="ScheduledList" MaxHeight="74" />
+                  </Border>
+                  <TextBlock x:Name="ScheduledActionStatus" Foreground="{StaticResource TextSecondaryBrush}"
+                             TextWrapping="Wrap" FontSize="10" Margin="0,4,0,0" />
+
+                  <TextBlock Text="Daily routines" Foreground="{StaticResource TextPrimaryBrush}"
+                              FontWeight="SemiBold" FontSize="12.5" Margin="0,12,0,4" />
+                  <ItemsControl x:Name="RoutineList" MaxHeight="110">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <Border Background="{StaticResource GlassCardBrush}" BorderBrush="{StaticResource GlassCardBorderBrush}"
+                                BorderThickness="1" CornerRadius="10" Padding="10,6" Margin="0,2">
+                          <DockPanel>
+                            <Button Content="Run now" Tag="{Binding Id}" Click="OnRoutineRunNowClick"
+                                    DockPanel.Dock="Right" Padding="8,3" Margin="4,0,0,0" />
+                            <Button Content="{Binding IsEnabled, Converter={StaticResource RoutineToggleTextConverter}}"
+                                    Tag="{Binding Id}" Click="OnRoutineToggleClick"
+                                    DockPanel.Dock="Right" Padding="8,3" Margin="4,0,0,0" />
+                            <Button Content="×" Tag="{Binding Id}" Click="OnRoutineDeleteClick"
+                                    DockPanel.Dock="Right" Padding="6,3" />
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                              <Border Background="{Binding IsEnabled, Converter={StaticResource RoutineStatusBgConverter}}"
+                                      BorderBrush="{Binding IsEnabled, Converter={StaticResource RoutineStatusBorderConverter}}"
+                                      BorderThickness="1" CornerRadius="4" Padding="5,1" Margin="0,0,8,0">
+                                <TextBlock Text="{Binding IsEnabled, Converter={StaticResource RoutineStatusTextConverter}}"
+                                           Foreground="{Binding IsEnabled, Converter={StaticResource RoutineStatusFgConverter}}"
+                                           FontSize="9" FontWeight="SemiBold" />
+                              </Border>
+                              <TextBlock Text="{Binding Name}" Foreground="{StaticResource TextPrimaryBrush}"
+                                         VerticalAlignment="Center" TextTrimming="CharacterEllipsis" FontSize="11.5" />
+                            </StackPanel>
+                          </DockPanel>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </ScrollViewer>
+
+              <!-- TAB 2: Stats (Bento Grid) -->
+              <StackPanel x:Name="PageStats" Visibility="Collapsed">
+                <TextBlock Text="Your day" Style="{StaticResource SectionTitle}" />
+                <UniformGrid Columns="2" Rows="2" Margin="0,10,0,0">
+                  <Border Style="{StaticResource MetricCardCyan}">
+                    <StackPanel>
+                      <TextBlock Text="DICTATED WORDS" Style="{StaticResource Eyebrow}" Foreground="{StaticResource SoulCyanBrush}" />
+                      <TextBlock x:Name="DictatedStat" Text="0" Style="{StaticResource MetricValue}" />
+                    </StackPanel>
+                  </Border>
+                  <Border Style="{StaticResource MetricCardViolet}">
+                    <StackPanel>
+                      <TextBlock Text="VOICE COMMANDS" Style="{StaticResource Eyebrow}" Foreground="{StaticResource SoulVioletBrush}" />
+                      <TextBlock x:Name="VoiceStat" Text="0" Style="{StaticResource MetricValue}" />
+                    </StackPanel>
+                  </Border>
+                  <Border Style="{StaticResource MetricCardAmber}">
+                    <StackPanel>
+                      <TextBlock Text="TOOLS EXECUTED" Style="{StaticResource Eyebrow}" Foreground="{StaticResource SoulAmberBrush}" />
+                      <TextBlock x:Name="ToolsStat" Text="0" Style="{StaticResource MetricValue}" />
+                    </StackPanel>
+                  </Border>
+                  <Border Style="{StaticResource MetricCardEmerald}">
+                    <StackPanel>
+                      <TextBlock Text="TIME SAVED" Style="{StaticResource Eyebrow}" Foreground="{StaticResource SoulEmeraldBrush}" />
+                      <TextBlock x:Name="TimeSavedStat" Text="0 min" Style="{StaticResource MetricValue}" />
+                    </StackPanel>
+                  </Border>
+                </UniformGrid>
+              </StackPanel>
+
+              <!-- TAB 3: Clipboard -->
+              <StackPanel x:Name="PageClipboard" Visibility="Collapsed">
+                <TextBlock Text="Clipboard" Style="{StaticResource SectionTitle}" />
+                <Border Background="{StaticResource GlassCardBrush}" BorderBrush="{StaticResource GlassCardBorderBrush}"
+                        BorderThickness="1" CornerRadius="12" Padding="12,10" Margin="0,8,0,4">
+                  <TextBlock x:Name="ClipboardPreview" Foreground="{StaticResource TextPrimaryBrush}"
+                             TextWrapping="Wrap" FontSize="11.5" MaxHeight="60" TextTrimming="CharacterEllipsis" />
+                </Border>
+                <TextBlock Text="Select an item or click Paste to insert into the active window."
+                           Foreground="{StaticResource TextMutedBrush}" FontSize="10" Margin="2,0,0,6" />
+                <ListBox x:Name="ClipboardHistoryList" MaxHeight="220" BorderThickness="0"
+                         Background="Transparent">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate>
+                      <Border Background="{StaticResource GlassCardBrush}" BorderBrush="{StaticResource GlassCardBorderBrush}"
+                              BorderThickness="1" CornerRadius="10" Padding="8,6" Margin="0,2">
+                        <DockPanel LastChildFill="True">
+                          <Border DockPanel.Dock="Left"
+                                  Background="{Binding ContentType, Converter={StaticResource ClipTypeBgConverter}}"
+                                  BorderBrush="{Binding ContentType, Converter={StaticResource ClipTypeBorderConverter}}"
+                                  BorderThickness="1" CornerRadius="4" Padding="5,2" Margin="0,0,8,0" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding ContentType, Converter={StaticResource ClipTypeTextConverter}}"
+                                       Foreground="{Binding ContentType, Converter={StaticResource ClipTypeFgConverter}}"
+                                       FontSize="9" FontWeight="SemiBold" />
+                          </Border>
+                          <Button DockPanel.Dock="Right" Content="Paste" Tag="{Binding Id}"
+                                  Click="OnClipboardItemClick" Padding="8,3" Margin="6,0,0,0"
+                                  VerticalAlignment="Center" FontSize="10" />
+                          <TextBlock Text="{Binding PreviewText}" Foreground="{StaticResource TextPrimaryBrush}"
+                                     FontSize="11" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                        </DockPanel>
+                      </Border>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+              </StackPanel>
+
+              <!-- TAB 4: Apps -->
+              <StackPanel x:Name="PageApps" Visibility="Collapsed">
+                <TextBlock Text="Apps" Style="{StaticResource SectionTitle}" />
+                <TextBox x:Name="AppSearch" Margin="0,8,0,0" ToolTip="Search apps, calculate (e.g. 45 * 1.18), or commands (> ping)"
+                         Style="{StaticResource AppSearchPillStyle}"
+                         TextChanged="OnAppSearchChanged"
+                         KeyDown="OnAppSearchKeyDown" />
+                <Border Background="{StaticResource GlassCardBrush}" BorderBrush="{StaticResource GlassCardBorderBrush}"
+                        BorderThickness="1" CornerRadius="12" Padding="4" Margin="0,6,0,0">
+                  <ListBox x:Name="AppResults" MaxHeight="160"
+                           SelectionChanged="OnAppSelected">
+                    <ListBox.ItemTemplate>
+                      <DataTemplate>
+                        <DockPanel Margin="4,2">
+                          <Border Width="22" Height="22" CornerRadius="6" Background="#2038BDF8"
+                                  BorderBrush="#3338BDF8" BorderThickness="1" Margin="0,0,8,0"
+                                  VerticalAlignment="Center">
+                            <TextBlock Text="⊞" Foreground="{StaticResource SoulCyanBrush}"
+                                       FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                          </Border>
+                          <TextBlock Text="{Binding Name}" Foreground="{StaticResource TextPrimaryBrush}"
+                                     FontSize="11.5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                        </DockPanel>
+                      </DataTemplate>
+                    </ListBox.ItemTemplate>
+                  </ListBox>
+                </Border>
+              </StackPanel>
+
+              <!-- TAB 5: Wallpaper -->
+              <StackPanel x:Name="PageWallpaper" Visibility="Collapsed">
+                <TextBlock Text="Wallpaper" Style="{StaticResource SectionTitle}" />
+                <TextBlock Text="Choose a wallpaper image to apply it to your desktop."
+                           Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="0,6,0,6" />
+                <Border Background="{StaticResource GlassCardBrush}" BorderBrush="{StaticResource GlassCardBorderBrush}"
+                        BorderThickness="1" CornerRadius="12" Padding="4">
+                  <ListBox x:Name="WallpaperResults" MaxHeight="155"
+                           SelectionChanged="OnWallpaperSelected" />
+                </Border>
+                <Button Content="Open personalization settings" Tag="ms-settings:personalization-background"
+                        Click="OnSettingsClick" HorizontalAlignment="Left" Margin="0,8,0,0" />
+              </StackPanel>
+
+              <!-- TAB 6: Power -->
+              <StackPanel x:Name="PagePower" Visibility="Collapsed">
+                <TextBlock Text="Power &amp; State" Style="{StaticResource SectionTitle}" />
+                <UniformGrid Columns="3" Rows="2" Margin="0,8,0,0">
+                  <Button Content="🔒 Lock screen&#10;Win + L workstation" Click="OnLockClick" Style="{StaticResource TileButton}" />
+                  <Button Content="💤 Sleep&#10;Low power standby" Click="OnSleepClick" Style="{StaticResource TileButton}" />
+                  <ToggleButton x:Name="QuietModeToggle" Content="🔕 Quiet mode&#10;Focus assistance" Margin="4" Padding="12,10"
+                                Checked="OnQuietModeChanged" Unchecked="OnQuietModeChanged" />
+                  <Button Content="🔄 Restart&#10;Reboot system" Click="OnRestartClick" Style="{StaticResource DangerTileButton}" />
+                  <Button Content="⏻ Shut down&#10;Power off machine" Click="OnShutdownClick" Style="{StaticResource DangerTileButton}" />
+                </UniformGrid>
+              </StackPanel>
+
+            </Grid>
+          </Grid>
+        </Grid>
+      </Grid>
+    </Border>
+  </Grid>
+</Window>

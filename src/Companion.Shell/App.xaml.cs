@@ -1,13 +1,93 @@
-﻿using System.Configuration;
-using System.Data;
+using System.IO;
 using System.Windows;
+using Companion.Core;
+using Companion.Shell.Windows;
+using NotifyIcon = System.Windows.Forms.NotifyIcon;
 
 namespace Companion.Shell;
 
-/// <summary>
-/// Interaction logic for App.xaml
-/// </summary>
-public partial class App : Application
+public partial class App : System.Windows.Application
 {
-}
+    private static Mutex? _singleInstance;
+    private IslandWindow? _island;
+    private NotifyIcon? _trayIcon;
+    private bool _ownsMutex;
 
+    protected override void OnStartup(StartupEventArgs e)
+    {
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            try { File.AppendAllText(Path.Combine(AppPaths.Root, "shell.log"), $"[{DateTime.UtcNow:u}] [Unhandled] {args.ExceptionObject}\n"); } catch { }
+        };
+        DispatcherUnhandledException += (_, args) =>
+        {
+            try { File.AppendAllText(Path.Combine(AppPaths.Root, "shell.log"), $"[{DateTime.UtcNow:u}] [Dispatcher] {args.Exception}\n"); } catch { }
+        };
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            try { File.AppendAllText(Path.Combine(AppPaths.Root, "shell.log"), $"[{DateTime.UtcNow:u}] [UnobservedTask] {args.Exception}\n"); } catch { }
+        };
+
+        File.AppendAllText(Path.Combine(AppPaths.Root, "shell.log"), $"[{DateTime.UtcNow:u}] Shell starting...\n");
+
+        _singleInstance = new Mutex(initiallyOwned: true, "Companion.SingleInstance", out bool isNew);
+        if (!isNew)
+        {
+            File.AppendAllText(Path.Combine(AppPaths.Root, "shell.log"), $"[{DateTime.UtcNow:u}] Another instance is already running. Shutting down.\n");
+            Shutdown();
+            return;
+        }
+
+        _ownsMutex = true;
+        base.OnStartup(e);
+        _island = new IslandWindow();
+        _island.Show();
+        _island.ShowDock();
+        CreateTrayIcon();
+        try
+        {
+            _trayIcon?.ShowBalloonTip(3000, "Hitodama AI", "Hitodama is ready at the top of your screen! Click or scroll to expand.", System.Windows.Forms.ToolTipIcon.Info);
+        }
+        catch { }
+        File.AppendAllText(Path.Combine(AppPaths.Root, "shell.log"), $"[{DateTime.UtcNow:u}] Shell started successfully.\n");
+    }
+
+    private void CreateTrayIcon()
+    {
+        var menu = new System.Windows.Forms.ContextMenuStrip();
+        menu.Items.Add("Show island", null, (_, _) => _island?.ShowDock());
+        menu.Items.Add("Shape Hitodama", null, (_, _) => _island?.OpenStudioWindow());
+        menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
+        menu.Items.Add("Exit", null, (_, _) => Shutdown());
+
+        _trayIcon = new NotifyIcon
+        {
+            Icon = System.Drawing.SystemIcons.Application,
+            Text = "Hitodama",
+            ContextMenuStrip = menu,
+            Visible = true
+        };
+        _trayIcon.DoubleClick += (_, _) => _island?.ToggleDock();
+    }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        if (_trayIcon is not null)
+        {
+            _trayIcon.Visible = false;
+            _trayIcon.Dispose();
+        }
+
+        if (_singleInstance is not null)
+        {
+            if (_ownsMutex)
+            {
+                _singleInstance.ReleaseMutex();
+            }
+
+            _singleInstance.Dispose();
+        }
+
+        base.OnExit(e);
+    }
+}
