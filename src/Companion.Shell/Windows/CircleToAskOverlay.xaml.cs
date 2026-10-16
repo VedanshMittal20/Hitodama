@@ -55,8 +55,17 @@ public partial class CircleToAskOverlay : Window, IDisposable
     [DllImport("user32.dll", EntryPoint = "SetWindowLongW", SetLastError = true)]
     private static extern IntPtr SetWindowLong32(IntPtr windowHandle, int index, IntPtr value);
 
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetWindowPos(
+        IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+    private static readonly IntPtr HwndTopMost = new(-1);
+    private const uint SwpNoActivate = 0x0010;
+    private const uint SwpShowWindow = 0x0040;
+
     private readonly List<Point> _lassoPoints = [];
     private readonly MicCaptureService _microphone = new();
+    private bool _hasMicrophone;
     private readonly System.Windows.Shapes.Polyline _outerStroke = CreateStroke(
         CreateFrozenBrush(Color.FromArgb(90, 56, 189, 248)), 4);
     private readonly System.Windows.Shapes.Polyline _innerStroke = CreateStroke(
@@ -115,22 +124,21 @@ public partial class CircleToAskOverlay : Window, IDisposable
         }
 
         _screen = System.Windows.Forms.Screen.FromPoint(System.Windows.Forms.Cursor.Position);
-        PositionOverCurrentMonitor();
         _lassoPoints.Clear();
         UpdateStroke();
         Show();
+        PositionOverCurrentMonitor();
         _requestCancellation = new CancellationTokenSource();
+        _isCapturing = true;
         try
         {
             _microphone.Start(bypassVadGate: true);
-            _isCapturing = true;
+            _hasMicrophone = true;
         }
-        catch
+        catch (Exception exception)
         {
-            Hide();
-            _requestCancellation.Dispose();
-            _requestCancellation = null;
-            throw;
+            _hasMicrophone = false;
+            SafeDiagnostics.WriteFailure("circle-to-ask", "mic-start-optional", exception);
         }
     }
 
@@ -160,7 +168,9 @@ public partial class CircleToAskOverlay : Window, IDisposable
             linkedCancellation.Token.ThrowIfCancellationRequested();
 
             byte[] image = CaptureSelection();
-            byte[] audio = await _microphone.StopRecordingAsPcmAsync(linkedCancellation.Token);
+            byte[] audio = _hasMicrophone
+                ? await _microphone.StopRecordingAsPcmAsync(linkedCancellation.Token)
+                : [];
             try
             {
                 LastOcrText = await ExtractTextFromImageAsync(image);
@@ -192,7 +202,7 @@ public partial class CircleToAskOverlay : Window, IDisposable
         _requestCancellation?.Cancel();
         if (!_isCapturing)
         {
-            if (!_endingCapture && _microphone.IsRecording)
+            if (!_endingCapture && _hasMicrophone && _microphone.IsRecording)
             {
                 await _microphone.CancelRecordingAsync();
             }
@@ -211,7 +221,10 @@ public partial class CircleToAskOverlay : Window, IDisposable
         Hide();
         try
         {
-            await _microphone.CancelRecordingAsync();
+            if (_hasMicrophone)
+            {
+                await _microphone.CancelRecordingAsync();
+            }
         }
         finally
         {
@@ -225,11 +238,20 @@ public partial class CircleToAskOverlay : Window, IDisposable
 
     private void PositionOverCurrentMonitor()
     {
+        IntPtr handle = new WindowInteropHelper(this).Handle;
+        if (handle != IntPtr.Zero)
+        {
+            SetWindowPos(handle, HwndTopMost, _screen.Bounds.Left, _screen.Bounds.Top,
+                _screen.Bounds.Width, _screen.Bounds.Height, SwpNoActivate | SwpShowWindow);
+        }
+
         var dpi = VisualTreeHelper.GetDpi(this);
-        Left = _screen.Bounds.Left / dpi.DpiScaleX;
-        Top = _screen.Bounds.Top / dpi.DpiScaleY;
-        Width = _screen.Bounds.Width / dpi.DpiScaleX;
-        Height = _screen.Bounds.Height / dpi.DpiScaleY;
+        double scaleX = dpi.DpiScaleX > 0 ? dpi.DpiScaleX : 1.0;
+        double scaleY = dpi.DpiScaleY > 0 ? dpi.DpiScaleY : 1.0;
+        Left = _screen.Bounds.Left / scaleX;
+        Top = _screen.Bounds.Top / scaleY;
+        Width = _screen.Bounds.Width / scaleX;
+        Height = _screen.Bounds.Height / scaleY;
     }
 
     private void OnMouseDown(object sender, MouseButtonEventArgs e)
@@ -381,19 +403,17 @@ public partial class CircleToAskOverlay : Window, IDisposable
         if (crop.Width < 2 || crop.Height < 2)
         {
             IntPtr foregroundWindow = GetForegroundWindow();
-            if (foregroundWindow == IntPtr.Zero || !GetWindowRect(foregroundWindow, out NativeRect windowRect))
+            if (foregroundWindow != IntPtr.Zero && GetWindowRect(foregroundWindow, out NativeRect windowRect))
             {
-                throw new InvalidOperationException("Could not determine the active window or circled region.");
+                crop = Rectangle.Intersect(
+                    screenBounds,
+                    Rectangle.FromLTRB(windowRect.Left, windowRect.Top, windowRect.Right, windowRect.Bottom));
             }
-
-            crop = Rectangle.Intersect(
-                screenBounds,
-                Rectangle.FromLTRB(windowRect.Left, windowRect.Top, windowRect.Right, windowRect.Bottom));
         }
 
         if (crop.Width < 2 || crop.Height < 2)
         {
-            throw new InvalidOperationException("The selected screen region is empty.");
+            crop = screenBounds;
         }
 
         using var capture = new Bitmap(crop.Width, crop.Height, PixelFormat.Format24bppRgb);

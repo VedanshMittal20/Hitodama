@@ -16,21 +16,23 @@ public sealed class EqualizerControl : FrameworkElement
         BarBrush.Freeze();
     }
 
+    private static readonly double[] RestingHeights = [5.0, 10.0, 14.0, 9.0, 6.0];
+
     private readonly SpringValue[] _barSprings =
     [
-        new(3.0, omega: 24.0, zeta: 0.70),
-        new(3.0, omega: 26.0, zeta: 0.68),
-        new(3.0, omega: 22.0, zeta: 0.72),
-        new(3.0, omega: 25.0, zeta: 0.69),
-        new(3.0, omega: 23.0, zeta: 0.71)
+        new(5.0, omega: 24.0, zeta: 0.70),
+        new(10.0, omega: 26.0, zeta: 0.68),
+        new(14.0, omega: 22.0, zeta: 0.72),
+        new(9.0, omega: 25.0, zeta: 0.69),
+        new(6.0, omega: 23.0, zeta: 0.71)
     ];
 
     private readonly Stopwatch _clock = new();
+    private readonly System.Windows.Threading.DispatcherTimer _timer = new();
     private TimeSpan _lastTime;
     private bool _isAnimating;
     private bool _isPlaying;
     private double _audioLevel;
-    private TimeSpan _lastRenderedAt;
     private Brush? _albumBrush;
 
     public static readonly DependencyProperty HasAlbumPaletteProperty =
@@ -102,6 +104,8 @@ public sealed class EqualizerControl : FrameworkElement
     {
         Width = 26;
         Height = 18;
+        _timer.Interval = TimeSpan.FromMilliseconds(80);
+        _timer.Tick += OnTimerTick;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
         IsVisibleChanged += OnVisibilityChanged;
@@ -136,10 +140,11 @@ public sealed class EqualizerControl : FrameworkElement
             control._isPlaying = (bool)e.NewValue;
             if (!control._isPlaying)
             {
-                foreach (var spring in control._barSprings)
+                for (int i = 0; i < control._barSprings.Length; i++)
                 {
-                    spring.Target = 3.0;
-                    spring.Reset(3.0);
+                    double h = i < RestingHeights.Length ? RestingHeights[i] : 3.0;
+                    control._barSprings[i].Target = h;
+                    control._barSprings[i].Reset(h);
                 }
                 control.StopAnimation();
                 control.InvalidateVisual();
@@ -187,8 +192,7 @@ public sealed class EqualizerControl : FrameworkElement
                 _isAnimating = true;
                 _clock.Restart();
                 _lastTime = TimeSpan.Zero;
-                _lastRenderedAt = TimeSpan.FromSeconds(-1);
-                CompositionTarget.Rendering += OnRendering;
+                _timer.Start();
             }
         }
     }
@@ -199,11 +203,11 @@ public sealed class EqualizerControl : FrameworkElement
         {
             _isAnimating = false;
             _clock.Stop();
-            CompositionTarget.Rendering -= OnRendering;
+            _timer.Stop();
         }
     }
 
-    private void OnRendering(object? sender, EventArgs e)
+    private void OnTimerTick(object? sender, EventArgs e)
     {
         var now = _clock.Elapsed;
         if (!IsVisible)
@@ -212,14 +216,8 @@ public sealed class EqualizerControl : FrameworkElement
             return;
         }
 
-        if ((now - _lastRenderedAt).TotalMilliseconds < 33)
-        {
-            return;
-        }
-
-        double dt = Math.Clamp((now - _lastTime).TotalSeconds, 0.001, 0.050);
+        double dt = Math.Clamp((now - _lastTime).TotalSeconds, 0.010, 0.100);
         _lastTime = now;
-        _lastRenderedAt = now;
         double seconds = now.TotalSeconds;
 
         double maxHeight = Math.Max(12.0, ActualHeight > 0 ? ActualHeight : 18.0);
@@ -245,7 +243,7 @@ public sealed class EqualizerControl : FrameworkElement
         {
             for (int i = 0; i < _barSprings.Length; i++)
             {
-                _barSprings[i].Target = minHeight;
+                _barSprings[i].Target = i < RestingHeights.Length ? RestingHeights[i] : 3.0;
             }
         }
 

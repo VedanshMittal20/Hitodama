@@ -26,7 +26,7 @@ public sealed class GeminiVisionService
         string apiKey = SecretStore.LoadApiKey()
             ?? throw new InvalidOperationException("Add a Gemini API key in Void Studio before using Circle to Ask.");
         string endpoint =
-            $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={Uri.EscapeDataString(apiKey)}";
+            $"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key={Uri.EscapeDataString(apiKey)}";
         var partsList = new List<object>
         {
             new { inline_data = new { mime_type = "image/jpeg", data = Convert.ToBase64String(jpegImage) } },

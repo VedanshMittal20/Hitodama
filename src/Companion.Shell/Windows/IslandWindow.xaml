@@ -17,7 +17,8 @@
             BorderBrush="{StaticResource IslandSpecularBorderBrush}" BorderThickness="1"
             CornerRadius="18" Padding="12,4" ClipToBounds="True"
             Cursor="Hand" ToolTip="Click or scroll down to open Void dock"
-            PreviewMouseLeftButtonUp="OnIslandMouseLeftButtonUp">
+            PreviewMouseLeftButtonUp="OnIslandMouseLeftButtonUp"
+            MouseEnter="OnIslandMouseEnter" MouseLeave="OnIslandMouseLeave">
       <Border.RenderTransform>
         <TranslateTransform x:Name="IslandNudgeTransform" X="0" Y="0" />
       </Border.RenderTransform>

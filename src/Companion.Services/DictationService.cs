@@ -155,7 +155,7 @@ public sealed class DictationService : IDisposable
         CancellationToken cancellationToken)
     {
         string endpoint =
-            $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={Uri.EscapeDataString(apiKey)}";
+            $"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key={Uri.EscapeDataString(apiKey)}";
         var payload = new
         {
             system_instruction = new

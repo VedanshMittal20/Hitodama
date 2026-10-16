@@ -54,7 +54,6 @@ public partial class App : System.Windows.Application
         base.OnStartup(e);
         _island = new IslandWindow();
         _island.Show();
-        _island.ShowDock();
         CreateTrayIcon();
         try
         {

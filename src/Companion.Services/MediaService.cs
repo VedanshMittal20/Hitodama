@@ -265,8 +265,22 @@ public sealed class MediaService : IAsyncDisposable
                     : "Audio playback");
 
             byte[]? thumbnail = properties is not null ? await ReadThumbnailAsync(properties.Thumbnail) : null;
-            BitmapSource? thumbnailBitmap = DecodeThumbnail(thumbnail);
-            AlbumPalette palette = ExtractAlbumPalette(thumbnailBitmap);
+            BitmapSource? thumbnailBitmap = null;
+            AlbumPalette? palette = null;
+            if (CurrentTrack is not null &&
+                CurrentTrack.Title == title &&
+                CurrentTrack.Artist == artist &&
+                ((thumbnail == null && CurrentTrack.ThumbnailBytes == null) ||
+                 (thumbnail != null && CurrentTrack.ThumbnailBytes != null && CurrentTrack.ThumbnailBytes.AsSpan().SequenceEqual(thumbnail))))
+            {
+                thumbnailBitmap = CurrentTrack.ThumbnailBitmap;
+                palette = CurrentTrack.Palette;
+            }
+            else
+            {
+                thumbnailBitmap = DecodeThumbnail(thumbnail);
+                palette = ExtractAlbumPalette(thumbnailBitmap);
+            }
             TimeSpan duration = timeline is not null && timeline.EndTime > timeline.StartTime
                 ? timeline.EndTime - timeline.StartTime
                 : TimeSpan.Zero;

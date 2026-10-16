@@ -160,6 +160,12 @@ public partial class IslandWindow : Window
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern bool SystemParametersInfo(uint action, uint parameter, string value, uint flags);
 
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GetCurrentProcess();
+
+    [DllImport("psapi.dll", SetLastError = true)]
+    private static extern int EmptyWorkingSet(IntPtr hProcess);
+
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool SetProcessWorkingSetSize(IntPtr processHandle, IntPtr minimumWorkingSetSize,
         IntPtr maximumWorkingSetSize);
@@ -281,7 +287,7 @@ public partial class IslandWindow : Window
         _tabIndicatorSpring = _animator.CreateSpring(0.0, omega: 26.0, zeta: 0.85);
         _idleTrimTimer = new System.Windows.Threading.DispatcherTimer
         {
-            Interval = TimeSpan.FromMinutes(2)
+            Interval = TimeSpan.FromSeconds(20)
         };
         _idleTrimTimer.Tick += OnIdleTrimTimerTick;
         _mediaProgressTimer = new System.Windows.Threading.DispatcherTimer
@@ -378,14 +384,6 @@ public partial class IslandWindow : Window
         ApplyLoadout(LoadoutStore.Load());
         ClockText.Text = DateTime.Now.ToString("h:mm");
         PositionAtTopCenter();
-        LoadTodos();
-        LoadStats();
-        LoadApps();
-        LoadWallpapers();
-        LoadScheduledActions();
-        LoadClipboardEntries();
-        UpdateSelectedTab();
-        LoadAudioControls();
         UpdateDarkModeButton();
         UpdateClockTimerState();
         _ = _mediaService.InitializeAsync();
@@ -397,8 +395,6 @@ public partial class IslandWindow : Window
 
         UpdateTimerDisplayState();
         UpdatePersistentIslandState();
-        LoadWifiInfo();
-        LoadBluetoothInfo();
         _scheduler = new AutonomousScheduler(_database, ExecuteScheduledActionAsync);
         _schedulerCompletedHandler = action => Dispatcher.BeginInvoke(() =>
         {
@@ -722,6 +718,7 @@ public partial class IslandWindow : Window
 
         if (state == IslandState.ExpandedDock)
         {
+            UpdateSelectedTab();
             Activate();
         }
 
@@ -819,11 +816,23 @@ public partial class IslandWindow : Window
         ClockDivider.Visibility = Visibility.Visible;
         CollapsedMusicPrevious.Visibility = hasMusic ? Visibility.Visible : Visibility.Collapsed;
         CollapsedMusicPlayPause.Visibility = hasMusic ? Visibility.Visible : Visibility.Collapsed;
-        CollapsedMusicNext.Visibility = hasMusic ? Visibility.Visible : Visibility.Collapsed;
-        CollapsedMusicPlayPause.Content = hasMusic ? "⏸" : "▶";
-        CollapsedEqualizer.IsPlaying = hasMusic;
+        CollapsedEqualizer.IsPlaying = hasMusic && (_isMouseOverIsland || _state == IslandState.ExpandedDock);
         CollapsedEqualizer.Visibility = hasMusic ? Visibility.Visible : Visibility.Collapsed;
         UpdateTimerDisplay();
+    }
+
+    private bool _isMouseOverIsland;
+
+    private void OnIslandMouseEnter(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        _isMouseOverIsland = true;
+        UpdateNowBarContent();
+    }
+
+    private void OnIslandMouseLeave(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        _isMouseOverIsland = false;
+        UpdateNowBarContent();
     }
 
     private void UpdateTimerDisplayState()
@@ -913,7 +922,7 @@ public partial class IslandWindow : Window
 
     private void TrimWorkingSet()
     {
-        if (_state != IslandState.Collapsed)
+        if (_state is IslandState.ExpandedDock)
         {
             return;
         }
@@ -923,12 +932,16 @@ public partial class IslandWindow : Window
         GC.Collect(2, GCCollectionMode.Forced, true, true);
         GC.WaitForPendingFinalizers();
         GC.Collect(2, GCCollectionMode.Forced, true, true);
-        using Process process = Process.GetCurrentProcess();
-        if (!SetProcessWorkingSetSize(process.Handle, new IntPtr(-1), new IntPtr(-1)))
+
+        IntPtr currentProcess = GetCurrentProcess();
+        try
         {
-            ShowCompactMessage(
-                $"Could not trim idle memory: {new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error()).Message}",
-                Controls.SoulState.Error);
+            EmptyWorkingSet(currentProcess);
+            SetProcessWorkingSetSize(currentProcess, new IntPtr(-1), new IntPtr(-1));
+        }
+        catch (Exception ex)
+        {
+            SafeDiagnostics.WriteFailure("idle", "trim-working-set", ex);
         }
     }
 
@@ -942,9 +955,8 @@ public partial class IslandWindow : Window
                 ControlMask = ProcessPowerThrottlingExecutionSpeed,
                 StateMask = enable ? ProcessPowerThrottlingExecutionSpeed : 0
             };
-            using Process currentProcess = Process.GetCurrentProcess();
             SetProcessInformation(
-                currentProcess.Handle,
+                GetCurrentProcess(),
                 ProcessPowerThrottling,
                 ref throttlingState,
                 (uint)Marshal.SizeOf<PROCESS_POWER_THROTTLING_STATE>());
@@ -1142,32 +1154,38 @@ public partial class IslandWindow : Window
 
     private static void LaunchStudio()
     {
-        string executable = Path.Combine(AppContext.BaseDirectory, "Companion.Studio.exe");
-        if (!File.Exists(executable))
+        try
         {
-            string siblingPublish = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "Studio", "Companion.Studio.exe"));
-            if (File.Exists(siblingPublish))
+            string[] candidates =
+            [
+                Path.Combine(AppContext.BaseDirectory, "..", "Studio", "Companion.Studio.exe"),
+                Path.Combine(AppContext.BaseDirectory, "Companion.Studio.exe"),
+                Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "src", "Companion.Studio", "bin", "Release", "net8.0-windows10.0.19041.0", "Companion.Studio.exe"),
+                Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "src", "Companion.Studio", "bin", "Debug", "net8.0-windows10.0.19041.0", "Companion.Studio.exe"),
+                Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "publish", "Studio", "Companion.Studio.exe"),
+                Path.Combine(AppContext.BaseDirectory, "publish", "Studio", "Companion.Studio.exe")
+            ];
+
+            string? target = candidates.Select(p => {
+                try { return Path.GetFullPath(p); } catch { return p; }
+            }).FirstOrDefault(File.Exists);
+
+            if (target is null)
             {
-                executable = siblingPublish;
+                System.Diagnostics.Trace.TraceWarning("Companion.Studio.exe could not be located in candidate paths.");
+                return;
             }
-        }
 
-        if (!File.Exists(executable))
+            Process.Start(new ProcessStartInfo(target)
+            {
+                UseShellExecute = true,
+                WorkingDirectory = Path.GetDirectoryName(target) ?? AppContext.BaseDirectory
+            });
+        }
+        catch (Exception ex)
         {
-            string framework = Path.GetFileName(Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory));
-            string configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent?.Name ?? "Debug";
-            executable = Path.GetFullPath(Path.Combine(
-                AppContext.BaseDirectory,
-                "..", "..", "..", "..",
-                "Companion.Studio", "bin", configuration, framework, "Companion.Studio.exe"));
+            System.Diagnostics.Trace.TraceWarning("Failed to launch Companion.Studio: {0}", ex.Message);
         }
-
-        if (!File.Exists(executable))
-        {
-            throw new FileNotFoundException("Build Companion.Studio or publish it beside Companion.Shell to open settings.", executable);
-        }
-
-        Process.Start(new ProcessStartInfo(executable) { UseShellExecute = true });
     }
 
     private async void OnAssistantHotkeyPressed()
@@ -1446,11 +1464,21 @@ public partial class IslandWindow : Window
                 await liveSession.SendCircleToAskTurnAsync(initialImage, initialAudio ?? [], ocrContext, cancellation.Token);
             }
 
-            microphone.StartRecording(retainAudio: false, streamContinuously: true);
+            bool micStarted = false;
+            try
+            {
+                microphone.StartRecording(retainAudio: false, streamContinuously: true);
+                micStarted = true;
+            }
+            catch (Exception micEx)
+            {
+                SafeDiagnostics.WriteFailure("voice-session", "mic-start-optional", micEx);
+            }
+
             CompactTitle.Text = "Live conversation";
-            CompactSubtitle.Text = audioPlayer.IsOutputAvailable
-                ? "Listening… Say something or click End"
-                : "Listening… speaker output is unavailable on this device";
+            CompactSubtitle.Text = micStarted
+                ? (audioPlayer.IsOutputAvailable ? "Listening… Say something or click End" : "Listening… speaker output is unavailable on this device")
+                : "Connected to Gemini Live (Mic unavailable)";
             CompactSoul.SoulState = Controls.SoulState.Listening;
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
@@ -2732,17 +2760,20 @@ public partial class IslandWindow : Window
                 MusicTitleText.Text = track.Title;
                 MusicArtistText.Text = string.IsNullOrWhiteSpace(track.Artist) ? "Playing" : track.Artist;
                 MusicPlayPauseButton.Content = track.IsPlaying ? "⏸" : "▶";
-                var artwork = LoadMediaArtwork(track.ThumbnailBytes);
-                ApplyAlbumPalette(track);
-                MusicAlbumArt.Source = artwork;
-                MusicAlbumArtPlaceholder.Visibility = artwork is not null ? Visibility.Collapsed : Visibility.Visible;
+                if (_state == IslandState.ExpandedDock && _selectedTab == 0)
+                {
+                    var artwork = LoadMediaArtwork(track.ThumbnailBytes);
+                    ApplyAlbumPalette(track);
+                    MusicAlbumArt.Source = artwork;
+                    MusicAlbumArtPlaceholder.Visibility = artwork is not null ? Visibility.Collapsed : Visibility.Visible;
+                }
                 ControlsEqualizer.IsPlaying = track.IsPlaying;
                 TimeSpan currentPos = track.GetCurrentPosition();
                 MusicTimelineProgress.Value = track.Duration > TimeSpan.Zero
                     ? currentPos.TotalSeconds / track.Duration.TotalSeconds * 100
                     : 0;
                 MusicTimelineText.Text = $"{FormatMediaTime(currentPos)} / {FormatMediaTime(track.Duration)}";
-                CollapsedEqualizer.IsPlaying = track.IsPlaying;
+                CollapsedEqualizer.IsPlaying = track.IsPlaying && (_isMouseOverIsland || _state == IslandState.ExpandedDock);
                 CollapsedEqualizer.Visibility = track.IsPlaying ? Visibility.Visible : Visibility.Collapsed;
                 CollapsedSoulName.Visibility = track.IsPlaying ? Visibility.Collapsed : Visibility.Visible;
                 ClockDivider.Visibility = track.IsPlaying ? Visibility.Collapsed : Visibility.Visible;
@@ -2918,7 +2949,7 @@ public partial class IslandWindow : Window
         {
             MusicPlayPauseButton.Content = isPlaying ? "⏸" : "▶";
             ControlsEqualizer.IsPlaying = isPlaying;
-            CollapsedEqualizer.IsPlaying = isPlaying;
+            CollapsedEqualizer.IsPlaying = isPlaying && (_isMouseOverIsland || _state == IslandState.ExpandedDock);
             CollapsedEqualizer.Visibility = isPlaying ? Visibility.Visible : Visibility.Collapsed;
             CollapsedSoulName.Visibility = isPlaying ? Visibility.Collapsed : Visibility.Visible;
             ClockDivider.Visibility = isPlaying ? Visibility.Collapsed : Visibility.Visible;

@@ -259,7 +259,7 @@
   </Style>
 
   <!-- Accent Primary Button Style -->
-  <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+  <Style x:Key="AccentPrimaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
     <Setter Property="Background" Value="{StaticResource AccentGlassBrush}" />
     <Setter Property="BorderBrush" Value="{StaticResource AccentBorderBrush}" />
     <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
